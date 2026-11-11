@@ -1,5 +1,7 @@
 """AI(무료 Gemini 또는 Claude)로 블로그 글(제목 + 본문 블록 + 태그)을 만든다."""
+import base64
 import json
+import time
 
 import anthropic
 import requests
@@ -25,6 +27,15 @@ MODES = {
             "제목과 첫 문단에 핵심 키워드를 자연스럽게 넣고, 소제목마다 질문 하나에 답한다. "
             "정확하지 않은 수치·날짜는 지어내지 말고, 확인이 필요한 부분은 확인을 권한다. "
             "마지막에 핵심 요약을 둔다."
+        ),
+    },
+    "review": {
+        "label": "내돈내산 후기",
+        "desc": "산 물건 사진으로 후기",
+        "guide": (
+            "내돈내산 제품 후기. 첨부한 사진을 보고 어떤 제품인지 파악해서 쓴다. 구성: 왜 샀는지(공감되는 계기) → "
+            "첫인상·외관·구성품(사진) → 직접 써보니 좋았던 점 → 아쉬운 점(솔직하게 1~2개) → 이런 분께 추천 → 한 줄 총평. "
+            "소제목 3~5개. 광고 같은 과장 없이 실제 쓴 사람처럼 쓴다."
         ),
     },
     "brand": {
@@ -111,11 +122,12 @@ IMAGE_GUIDE = (
 
 def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 1500,
                   brand_info: str = "", extra: str = "", news: list = None,
-                  photos: int = 0, style: str = "") -> dict:
+                  photos: int = 0, style: str = "", own_photos: list = None) -> dict:
+    """own_photos: jpeg bytes the AI looks at (review mode); image blocks then carry "photo": n."""
     """{'title': str, 'blocks': [{'type','text'}], 'tags': [str]} 를 돌려준다."""
     m = MODES[mode]
     prompt = (
-        f"주제: {topic}\n"
+        f"주제: {topic or '사진 속 제품 (사진을 보고 무엇인지 파악)'}\n"
         f"글 종류: {m['label']} - {m['guide']}\n"
         f"분량: 본문 약 {length}자\n"
     )
@@ -129,19 +141,29 @@ def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 15
             "확실하지 않은 부분은 '~로 알려졌다', '자세한 내용은 기사에서 확인'처럼 쓴다. "
             "독자가 이 이슈를 왜 찾아보는지, 알아두면 좋은 배경을 중심으로 쓴다.\n"
         )
-    if photos > 0:
+    if own_photos:
+        n = len(own_photos)
+        prompt += (
+            f"\n첨부한 사진 {n}장(순서대로 사진1~사진{n})을 모두 본문에 넣는다. 각 사진을 보고 가장 잘 맞는 자리에 "
+            f"type \"image\" 블록으로 넣고(첫 사진은 첫 문단 근처), photo 에 사진 번호(1~{n}), text 는 빈 문자열, "
+            "caption 에 사진 아래 붙일 자연스러운 한 줄(15자 안팎)을 쓴다. 사진에 실제로 보이는 것만 설명한다.\n"
+            "사실은 사진에 실제로 보이는 것과 사용자 메모만 쓴다. 제품명·브랜드는 사진 속 글자로 확인될 때만 쓰고, "
+            "아니면 일반 명칭으로 쓴다. 메모에 없는 가격·스펙·성분·효능은 지어내지 않는다. 의학적 효과 주장은 금지. "
+            "제목 맨 앞에는 제품명(또는 일반 명칭)을 넣는다.\n")
+    elif photos > 0:
         prompt += IMAGE_GUIDE.format(n=photos)
     if extra.strip():
         prompt += f"\n추가 요청:\n{extra.strip()}\n"
 
     api_key = (api_key or "").strip()
     if not api_key.startswith("sk-ant"):
-        post = _gemini(api_key, prompt, system_prompt(style))   # 무료 (Google AI Studio 키)
+        post = _gemini(api_key, prompt, system_prompt(style), own_photos)   # 무료 (Google AI Studio 키)
     else:
         post = _claude(api_key, prompt, system_prompt(style))   # 유료 (Anthropic 키)
     post["tags"] = [t.lstrip("#").strip() for t in post.get("tags", []) if t.strip()][:10]
-    post["blocks"] = [b for b in post.get("blocks", []) if b.get("text", "").strip()
-                      and (photos > 0 or b.get("type") != "image")][:80]
+    keep = lambda b: (b.get("type") == "image" and own_photos and b.get("photo")) or (
+        b.get("text", "").strip() and (photos > 0 or b.get("type") != "image"))
+    post["blocks"] = [b for b in post.get("blocks", []) if keep(b)][:80]
     if not post.get("title") or not post["blocks"]:
         raise RuntimeError("AI 응답이 비어 있습니다. 다시 시도해 주세요.")
     return post
@@ -158,7 +180,8 @@ GEMINI_SCHEMA = {
         "blocks": {"type": "ARRAY", "items": {
             "type": "OBJECT",
             "properties": {"type": {"type": "STRING", "enum": ["heading", "paragraph", "quote", "image"]},
-                           "text": {"type": "STRING"}, "caption": {"type": "STRING"}},
+                           "text": {"type": "STRING"}, "caption": {"type": "STRING"},
+                           "photo": {"type": "INTEGER"}},
             "required": ["type", "text"]}},
         "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
     },
@@ -166,17 +189,22 @@ GEMINI_SCHEMA = {
 }
 
 
-def _gemini(api_key, prompt, system=SYSTEM):
+def _gemini(api_key, prompt, system=SYSTEM, images=None):
     if not api_key:
         raise RuntimeError("AI 키가 없습니다. aistudio.google.com/apikey 에서 무료 키를 받아 넣으세요.")
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "contents": [{"role": "user", "parts": [
+            *({"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(b).decode()}}
+              for b in (images or [])),
+            {"text": prompt}]}],
         "generationConfig": {"responseMimeType": "application/json",
                              "responseSchema": GEMINI_SCHEMA, "maxOutputTokens": 16000},
     }
     last = ""
-    for model in GEMINI_MODELS:
+    for k, model in enumerate(GEMINI_MODELS * 2):   # busy (503) is usually brief: one more round
+        if k == len(GEMINI_MODELS):
+            time.sleep(20)
         try:
             r = requests.post(GEMINI_URL.format(model), json=body, timeout=(15, 120),
                               headers={"x-goog-api-key": api_key})

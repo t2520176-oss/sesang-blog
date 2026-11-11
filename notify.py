@@ -24,7 +24,8 @@ for _ in range(30):                      # up to ~5 min for Pages to deploy
 traffic = f" (검색 {info['traffic']})" if info.get("traffic") else ""
 r = requests.post("https://ntfy.sh/", timeout=20, json={
     "topic": topic,
-    "title": f"새 블로그 글: {info['keyword']}{traffic}",
+    "title": (f"후기 글 완성: {info['keyword']}" if info.get("kind") == "review"
+              else f"새 블로그 글: {info['keyword']}{traffic}"),
     "message": info["title"] + "\n눌러서 열고 네이버에 붙여넣으세요.",
     "click": url, "tags": ["memo"], "priority": 4})
 print("알림 전송:", r.status_code)

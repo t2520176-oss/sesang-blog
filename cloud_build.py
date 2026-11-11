@@ -71,8 +71,15 @@ def main():
     log(f"주제: {keyword} ({traffic or '직접 입력'}) - 글 쓰는 중...")
     post = writer.generate_post(key, keyword, mode, length, news=news, photos=photos, style=style)
 
+    publish(post, keyword, traffic, auto=not manual, items=items)
+
+
+def publish(post, keyword, traffic="", auto=False, items=None, own=None, kind=""):
+    """Build the post page into docs/, update the list and _notify.json. Returns the post url."""
+    if items is None:
+        items = json.loads(INDEX.read_text(encoding="utf-8")) if INDEX.exists() else []
     compose.ROOT = HERE / "_build"
-    page = compose.build(post, keyword, "", os.environ.get("PIXABAY_KEY", ""), log=log)
+    page = compose.build(post, keyword, "", os.environ.get("PIXABAY_KEY", ""), log=log, own=own)
     slug, n = page.parent.name[:13], 1          # ascii url: 20261111_2228
     while (POSTS / slug).exists():
         n += 1
@@ -84,17 +91,19 @@ def main():
     if thumb.exists():
         shutil.copy(thumb, dest / "thumb.jpg")
     items.insert(0, {"title": post["title"], "keyword": keyword, "traffic": traffic, "slug": slug,
-                     "date": dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "auto": not manual,
-                     "thumb": thumb.exists()})
+                     "date": dt.datetime.now(KST).strftime("%Y-%m-%d %H:%M"), "auto": auto,
+                     "thumb": thumb.exists(), "kind": kind})
     for old in items[KEEP:]:
         shutil.rmtree(POSTS / old["slug"], ignore_errors=True)
     items = items[:KEEP]
     write_index(items)
     site = os.environ.get("SITE_URL", "").rstrip("/")
+    url = f"{site}/posts/{slug}/" if site else ""
     (HERE / "_notify.json").write_text(json.dumps({
-        "title": post["title"], "keyword": keyword, "traffic": traffic,
-        "url": f"{site}/posts/{slug}/" if site else ""}, ensure_ascii=False), encoding="utf-8")
+        "title": post["title"], "keyword": keyword, "traffic": traffic, "url": url,
+        "kind": kind}, ensure_ascii=False), encoding="utf-8")
     log("완성:", post["title"])
+    return url
 
 
 def write_index(items):
@@ -108,7 +117,8 @@ def write_index(items):
         + (f'<img src="posts/{e(i["slug"])}/thumb.jpg" alt="">' if i.get("thumb") else '<div class="noimg">📝</div>')
         + f'<div><b>{e(i["title"])}</b><small>{e(i["date"])} · {e(i["keyword"])}'
         + (f' · 검색 {e(i["traffic"])}' if i.get("traffic") else "")
-        + ('' if i.get("auto") else ' · 직접 요청') + '</small></div></a>'
+        + (' · 🛍 내돈내산' if i.get("kind") == "review" else '' if i.get("auto") else ' · 직접 요청')
+        + '</small></div></a>'
         for i in items) or '<p class="empty">아직 만든 글이 없습니다. 첫 자동 실행을 기다리거나 [글 새로 만들기]를 누르세요.</p>'
     (DOCS / "index.html").write_text(INDEX_PAGE.replace("{{ROWS}}", rows), encoding="utf-8")
 

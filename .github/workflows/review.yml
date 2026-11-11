@@ -1,0 +1,60 @@
+name: 내돈내산 후기 만들기
+
+# 폰 GitHub 앱에서 이 저장소에 새 이슈(사진 첨부)를 만들면 실행됩니다. 저장소 주인이 만든 이슈만 처리.
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: blog
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: github.event.issue.user.login == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pillow anthropic
+      - name: 사진 보고 후기 쓰기
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: python cloud_review.py
+      - name: 사이트에 올리기
+        run: |
+          git config user.name "blog-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git commit -m "후기 글 $(date +%F)"
+          git pull --rebase -q
+          git push
+      - name: 폰 알림 보내기
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python notify.py
+      - name: 이슈에 결과 남기고 닫기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body-file _issue_reply.txt
+          gh issue close ${{ github.event.issue.number }}
+      - name: 실패 알림
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "❌ 후기를 만들지 못했어요. 사진이 붙어 있는지 확인하고 새 이슈로 다시 올려 주세요. (Actions 기록에 자세한 이유가 있어요)"
+          [ -n "$NTFY_TOPIC" ] && curl -s -H "Title: Blog review failed" -d "후기 글 만들기 실패 - GitHub 이슈의 댓글을 확인하세요" "https://ntfy.sh/$NTFY_TOPIC" || true

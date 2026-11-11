@@ -18,8 +18,9 @@ def _safe(name):
     return re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_")[:40] or "post"
 
 
-def build(post, keyword, folder="", pixabay_key="", log=print):
-    """Find photos, write files. Returns the preview html Path."""
+def build(post, keyword, folder="", pixabay_key="", log=print, own=None):
+    """Find photos, write files. Returns the preview html Path.
+    own: list of the user's own photo Paths; image blocks with "photo": n use them."""
     out = ROOT / f"{dt.datetime.now():%Y%m%d_%H%M}_{_safe(post['title'])}"
     out.mkdir(parents=True, exist_ok=True)
     used, blocks, n = set(), [], 0
@@ -28,6 +29,16 @@ def build(post, keyword, folder="", pixabay_key="", log=print):
             blocks.append(b)
             continue
         n += 1
+        if own:
+            i = int(b.get("photo") or 0) - 1
+            if 0 <= i < len(own) and i not in used:
+                used.add(i)
+                dst = out / f"사진{n}.jpg"
+                dst.write_bytes(Path(own[i]).read_bytes())
+                blocks.append({**b, "path": str(dst), "credit": "", "no": n})
+            else:
+                n -= 1
+            continue
         log(f"사진 {n} 찾는 중: {b['text']}")
         ph = images.find_photo(b["text"], keyword, out / f"사진{n}.jpg", folder, pixabay_key, used)
         if ph:
@@ -35,6 +46,12 @@ def build(post, keyword, folder="", pixabay_key="", log=print):
         else:
             n -= 1
             log(f"  -> '{b['text']}' 사진을 못 찾아 그 자리는 건너뜀")
+    for i, ph in enumerate(own or []):             # photos the AI left out go at the end
+        if i not in used:
+            n += 1
+            dst = out / f"사진{n}.jpg"
+            dst.write_bytes(Path(ph).read_bytes())
+            blocks.append({"type": "image", "text": "", "caption": "", "path": str(dst), "credit": "", "no": n})
     post = {**post, "blocks": blocks}
     (out / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
     (out / "본문.txt").write_text(_plain(post), encoding="utf-8")

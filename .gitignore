@@ -8,3 +8,5 @@ writer_auto_state.json
 _build/
 _notify.json
 ntfy_topic.txt
+_review/
+_issue_reply.txt
