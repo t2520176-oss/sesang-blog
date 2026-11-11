@@ -23,8 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -q requests pillow anthropic
-      - run: which ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
+      - run: pip install -q requests pillow anthropic imageio-ffmpeg
       - name: 사진 보고 후기 쓰기
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

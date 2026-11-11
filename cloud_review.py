@@ -41,19 +41,24 @@ def video_frames(data, work, i, n=3):
     """Take n sharp-ish stills from a video (ffmpeg) -> list of jpg Paths."""
     src = work / f"v{i}.mp4"
     src.write_bytes(data)
-    if not shutil.which("ffmpeg"):           # GitHub runner: install on first video only
-        subprocess.run("sudo apt-get update -q && sudo apt-get install -y -q ffmpeg", shell=True,
-                       stdout=subprocess.DEVNULL)
+    try:                                     # pip imageio-ffmpeg ships its own ffmpeg (no apt-get)
+        import imageio_ffmpeg
+        ff = imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        ff = shutil.which("ffmpeg") or "ffmpeg"
     try:
-        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                    "-of", "csv=p=0", str(src)], capture_output=True, text=True).stdout or 0)
-    except (OSError, ValueError):
+        info = subprocess.run([ff, "-i", str(src)], capture_output=True, text=True).stderr
+    except OSError:
         return []
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", info)
+    dur = int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3]) if m else 0
     out = []
+    if dur < 4:            # Galaxy "motion photo" clips are ~1.5 s: one still is enough
+        n = 1
     for k in range(n):
         t = dur * (k + 1) / (n + 1)
         raw, jpg = work / f"v{i}_{k}_raw.jpg", work / f"v{i}_{k}.jpg"
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src),
+        subprocess.run([ff, "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src),
                         "-frames:v", "1", "-q:v", "2", str(raw)])
         if raw.exists() and images._save(raw.read_bytes(), jpg):
             out.append(jpg)
