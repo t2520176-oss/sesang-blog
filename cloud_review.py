@@ -57,7 +57,8 @@ def main():
     if not paths:
         sys.exit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
 
-    product = "" if title.lower() in NO_NAME else title
+    # title is required by GitHub, so anything short ("1", ".", "ㅎ", "후기") means "work it out from the photos"
+    product = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
     notes = notes_from(body)
     extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}" if notes else ""
     style_f = HERE / "style_review.txt"
