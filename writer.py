@@ -170,7 +170,7 @@ def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 15
 
 
 # ---- Google Gemini (무료 등급) -------------------------------------------
-GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]   # 앞 모델 한도 초과 시 다음 모델
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]   # 앞 모델 한도 초과 시 다음 모델
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 GEMINI_SCHEMA = {
     "type": "OBJECT",
@@ -209,10 +209,10 @@ def _gemini(api_key, prompt, system=SYSTEM, images=None):
             r = requests.post(GEMINI_URL.format(model), json=body, timeout=(15, 120),
                               headers={"x-goog-api-key": api_key})
         except (requests.Timeout, requests.ConnectionError) as e:   # 응답 지연 -> 다음 모델
-            last = f"{model}: 응답 없음 ({type(e).__name__})"
+            last += f" | {model}: 응답 없음 ({type(e).__name__})"
             continue
         if r.status_code in (429, 404, 500, 503):        # 무료 한도 초과/모델 없음/혼잡 -> 다음 모델
-            last = f"{model}: {r.status_code} {r.text[:200]}"
+            last += f" | {model}: {r.status_code} {r.text[:120]}"
             continue
         if r.status_code in (400, 401, 403):
             raise RuntimeError(f"Gemini 키 오류 ({r.status_code}). 키를 확인하세요: {r.text[:200]}")
