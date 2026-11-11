@@ -31,7 +31,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-        run: python cloud_review.py
+        run: python cloud_review.py || (echo "AI busy - retry in 90s"; sleep 90; python cloud_review.py) || (echo "retry in 180s"; sleep 180; python cloud_review.py)
       - name: 사이트에 올리기
         run: |
           git config user.name "blog-bot"

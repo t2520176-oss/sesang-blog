@@ -54,18 +54,28 @@ def main():
     urls = [m["attachment"]["url"] for m in batch if m.get("attachment")]
     notes = " ".join(m.get("message", "") for m in batch if not m.get("attachment")
                      and m.get("message", "").strip()).strip()
-    st["since"] = batch[-1]["id"]           # mark done first: a bad photo must not loop forever
-    STATE.write_text(json.dumps(st), encoding="utf-8")
+    def done():
+        st.update(since=batch[-1]["id"], tries=0)
+        STATE.write_text(json.dumps(st), encoding="utf-8")
+
     if not urls:
         print("사진 없는 메모만 받음 - 건너뜀")
-        return
+        return done()
     print(f"받은 사진/동영상 {len(urls)}개, 메모 {len(notes)}자")
     try:
         title, url = cloud_review.make_review(cloud_review.download(urls), "", notes)
     except BaseException as e:  # noqa: BLE001
-        alert("후기 글 만들기 실패", f"다시 공유해 주세요. ({str(e)[:120]})")
         print("실패:", e)
+        busy = "바쁩니다" in str(e) or "Timeout" in str(e)
+        st["tries"] = st.get("tries", 0) + 1
+        if busy and st["tries"] < 8:          # free AI busy: try again on the next check (~5 min)
+            STATE.write_text(json.dumps(st), encoding="utf-8")
+            print(f"AI 서버가 바빠서 다음 확인 때 다시 시도 ({st['tries']}/8)")
+            return
+        done()                                # give up on this batch so it can't loop forever
+        alert("후기 글 만들기 실패", f"사진을 다시 공유해 주세요. ({str(e)[:100]})")
         return
+    done()
     print("완성:", title, url)
 
 
