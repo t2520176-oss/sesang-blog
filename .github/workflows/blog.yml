@@ -1,0 +1,44 @@
+name: 블로그 글 만들기
+
+on:
+  schedule:
+    - cron: "30 2 * * *"          # 매일 오전 11:30 (한국시간) 화제 이슈로 1개
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "쓸 주제 (비워두면 지금 가장 뜨는 이슈)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blog
+  cancel-in-progress: false
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pillow anthropic
+      - name: 글 + 사진 만들기
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+          TOPIC: ${{ github.event.inputs.topic }}
+          THRESHOLD: "1000"
+          PHOTOS: "3"
+        run: python cloud_build.py
+      - name: 사이트에 올리기
+        run: |
+          git config user.name "blog-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git diff --cached --quiet || git commit -m "새 글 $(date +%F)"
+          git push

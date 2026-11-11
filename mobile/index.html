@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>블로그 글쓰기 도우미 (폰)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap">
+<style>
+  :root{--g:#03c75a;--gd:#02a24a;--bg:#f4f5f7;--line:#e3e5e8;--txt:#222;--sub:#777}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;font-size:16px}
+  header{background:var(--g);color:#fff;padding:14px 16px;font-weight:700;font-size:18px}
+  header small{display:block;font-weight:400;font-size:12px;opacity:.9;margin-top:2px}
+  .card{background:#fff;margin:10px;border-radius:12px;padding:14px;box-shadow:0 1px 2px #0001}
+  .card h2{font-size:15px;margin:0 0 10px;color:var(--gd)}
+  label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+  input[type=text],textarea,select{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  textarea{resize:vertical}
+  .modes{display:flex;gap:6px}
+  .modes button{flex:1;padding:9px 4px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:13px;line-height:1.3}
+  .modes button.on{border-color:var(--g);background:#e9f9f0;color:var(--gd);font-weight:700}
+  .links{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .links a{font-size:13px;color:var(--gd);border:1px solid var(--g);border-radius:16px;padding:5px 10px;text-decoration:none}
+  .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px}
+  .thumbs div{position:relative}
+  .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block}
+  .thumbs span{position:absolute;left:4px;top:4px;background:#000a;color:#fff;font-size:11px;border-radius:8px;padding:1px 6px}
+  .thumbs b{position:absolute;right:2px;top:2px;background:#fff;color:#c00;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:14px}
+  .big{display:block;width:calc(100% - 20px);margin:10px;padding:15px;font:inherit;font-size:17px;font-weight:700;color:#fff;background:var(--g);border:0;border-radius:12px}
+  .big:disabled{background:#9bd9b6}
+  .row{display:flex;gap:8px;align-items:center}
+  .row>*{flex:1}
+  #status{margin:0 14px;font-size:14px;color:var(--gd);min-height:20px;white-space:pre-wrap}
+  #status.err{color:#c00}
+  .btn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--g);background:#fff;color:var(--gd);border-radius:16px}
+  .btn.fill{background:var(--g);color:#fff}
+  #result h3{font-size:21px;line-height:1.4;margin:4px 0 8px;font-weight:600}
+  .opts{background:#f3fbf6;border:1px dashed var(--g);border-radius:8px;padding:8px 10px;font-size:14px;margin-bottom:12px}
+  .opts div{display:flex;gap:6px;align-items:center;margin:6px 0}
+  .opts div span{flex:1}
+  #post p{line-height:1.85;margin:0 0 14px}
+  #post .h{font-weight:700;font-size:18px;margin-top:22px}
+  #post .q{border-left:4px solid var(--g);padding-left:10px;color:#555}
+  #post figure{margin:16px 0;text-align:center}
+  #post figure img{max-width:100%;border-radius:6px}
+  #post figcaption{font-size:13px;color:#888;margin-top:4px}
+  .seg{display:flex;justify-content:flex-end;margin:-4px 0 8px}
+  .phototag{display:inline-block;background:#fff3cd;color:#8a6d00;border-radius:6px;padding:2px 8px;font-size:12px;margin-bottom:6px}
+  .tags{color:var(--gd);font-size:14px;margin-top:10px}
+  .bar{position:sticky;bottom:0;background:#fffffff0;border-top:1px solid var(--line);padding:10px;display:flex;gap:6px;flex-wrap:wrap}
+  .bar .btn{flex:1;padding:10px 6px}
+  details summary{font-size:14px;color:var(--gd);cursor:pointer}
+  .hint{font-size:12px;color:var(--sub);line-height:1.6}
+  .hidden{display:none}
+  #toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#222e;color:#fff;padding:9px 16px;border-radius:20px;font-size:14px;opacity:0;transition:.2s;pointer-events:none;z-index:9}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>블로그 글쓰기 도우미
+  <small>네이버 로그인 없음 · 글은 복사해서 네이버 앱/사이트에 직접 붙여넣기</small></header>
+
+<div class="card">
+  <h2>① 무엇에 대해 쓸까요?</h2>
+  <div class="modes" id="modes">
+    <button data-m="home">홈판용<br><small>관심 끄는 이야기</small></button>
+    <button data-m="search" class="on">검색용<br><small>궁금증에 답하기</small></button>
+    <button data-m="brand">브랜드<br><small>내 사업 알리기</small></button>
+  </div>
+  <label for="topic">주제 / 키워드</label>
+  <input type="text" id="topic" placeholder="예: 포체티노 맨유 감독설">
+  <div class="links">
+    <a href="https://trends.google.co.kr/trending?geo=KR" target="_blank" rel="noopener">지금 인기 검색어 보기 ↗</a>
+    <a href="https://news.naver.com/main/ranking/popularDay.naver" target="_blank" rel="noopener">네이버 뉴스 랭킹 ↗</a>
+  </div>
+  <label for="facts">참고할 뉴스 제목·기사 내용 (붙여넣기 권장)</label>
+  <textarea id="facts" rows="4" placeholder="기사 제목이나 본문을 붙여넣으면 그 안의 사실만으로 씁니다. 비워 두면 일반 정보 위주로 씁니다."></textarea>
+  <div id="brandBox" class="hidden">
+    <label for="brand">브랜드 정보 (상호, 상품, 강점, 연락처 등)</label>
+    <textarea id="brand" rows="3"></textarea>
+  </div>
+</div>
+
+<div class="card">
+  <h2>② 이미지</h2>
+  <label style="display:flex;gap:8px;align-items:center;color:var(--txt);font-size:15px;margin:0 0 6px">
+    <input type="checkbox" id="autoImg" checked style="width:20px;height:20px"> AI 이미지 자동 생성 (대표 썸네일 + 소제목 카드 + 요약 카드)</label>
+  <input type="file" id="files" accept="image/*" multiple class="hidden">
+  <div class="row">
+    <button class="btn" id="pick">＋ 내 사진 추가 (선택)</button>
+    <span class="hint" id="photoInfo">내 사진을 추가하면 AI가 보고 알맞은 자리에 넣습니다</span>
+  </div>
+  <div class="thumbs" id="thumbs"></div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div><label for="len">분량</label>
+      <select id="len"><option value="900">짧게 (약 900자)</option><option value="1500" selected>보통 (약 1500자)</option><option value="2300">길게 (약 2300자)</option></select></div>
+  </div>
+  <label for="blogName">이미지에 넣을 블로그 이름</label>
+  <input type="text" id="blogName" placeholder="예: 세상관찰자">
+  <label for="extra">추가 요청 (선택)</label>
+  <input type="text" id="extra" placeholder="예: 마지막에 댓글 유도 한 줄">
+  <details style="margin-top:12px">
+    <summary>내 말투 설정 (내 블로그 글 붙여넣기)</summary>
+    <p class="hint">내 블로그 글 1~2개를 붙여넣으면 말투·문단 끊기·제목 짓는 방식을 따라 씁니다. 내용은 가져오지 않습니다.</p>
+    <textarea id="style" rows="8"></textarea>
+    <button class="btn" id="saveStyle" style="margin-top:6px">말투 저장</button>
+  </details>
+</div>
+
+<button class="big" id="go">✍ 글 만들기</button>
+<div id="status"></div>
+
+<div class="card hidden" id="result">
+  <h2>③ 완성된 글</h2>
+  <h3 id="title"></h3>
+  <div class="opts" id="opts"></div>
+  <div id="post"></div>
+  <div class="tags" id="tags"></div>
+  <details style="margin-top:14px">
+    <summary>네이버에 올리는 방법</summary>
+    <p class="hint">1. 네이버 블로그 앱(또는 사이트) [글쓰기]<br>
+    2. [제목 복사] → 제목 칸에 붙여넣기<br>
+    3. 본문: [글 전체 복사] 후 붙여넣고, <b>노란 '사진N' 자리</b>에 갤러리의 같은 사진을 넣기<br>
+    &nbsp;&nbsp;&nbsp;또는 위에서부터 [이 부분 복사] → 붙여넣기 → 사진 넣기를 반복<br>
+    4. 발행할 때 [태그 복사] → 태그 칸에 붙여넣기<br>
+    ※ 이슈 글은 숫자·발언 같은 사실을 기사와 한 번 대조한 뒤 발행하세요.</p>
+  </details>
+</div>
+<div class="bar hidden" id="bar">
+  <button class="btn" data-copy="title">제목 복사</button>
+  <button class="btn fill" data-copy="all">글 전체 복사</button>
+  <button class="btn" data-copy="tags">태그 복사</button>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const MODES = {
+  home: "네이버 블로그 홈 피드용. 첫 문단에서 호기심을 끌고, 공감 가는 이야기와 느낌을 담는다. 소제목 3~5개.",
+  search: "검색으로 들어온 사람이 궁금한 점을 바로 해결하도록 쓰는 정보성 글. 제목과 첫 문단에 핵심 키워드를 넣고, 소제목마다 질문 하나에 답한다. 마지막에 핵심 정리.",
+  brand: "아래 브랜드 정보를 자연스럽게 소개하는 글. 과장 광고나 검증 안 된 효능 주장은 하지 않는다. 고객의 문제 → 해결 방법 → 브랜드 소개 → 이용 방법 순서, 끝에 부드러운 행동 유도."
+};
+const DEFAULT_STYLE = `버닝썬 사건 이후 승리의 근황은? 결혼·혼인신고·출산 소식까지
+
+승리 결혼 사실이었다…이미 혼인신고, 혼전임신설에 직접 밝힌 입장
+
+빅뱅 출신 승리의 결혼 소식이 알려지면서 관심이 집중되고 있습니다.
+
+처음에는 여자친구의 임신과 출산 예정 소식이 전해지며 혼전임신설까지 등장했는데요. 이후 승리가 직접 입장을 밝히면서 결혼과 관련한 사실관계가 조금 더 구체적으로 확인됐습니다.
+
+승리는 이미 혼인신고를 마친 법적 부부라고 설명했습니다. 그렇다면 결혼식은 언제 열리는 걸까요? 출산과 관련한 소식은 어디까지 확`;
+
+let mode = "search", photos = [], post = null, sample = null, db = null, styleDoc = null;
+
+// ---------- small helpers ----------
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("on"),2200)}
+function status(t,err){const s=$("#status");s.textContent=t||"";s.className=err?"err":""}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+async function copy(text,what){
+  try{await navigator.clipboard.writeText(text);toast(what+" 복사됨")}
+  catch(e){const a=document.createElement("textarea");a.value=text;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.focus();a.select();
+    let ok=false;try{ok=document.execCommand("copy")}catch(_){}a.remove();toast(ok?what+" 복사됨":"복사가 막혔어요. 글을 길게 눌러 직접 복사하세요")}}
+
+// ---------- mode buttons ----------
+$("#modes").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;mode=b.dataset.m;
+  document.querySelectorAll("#modes button").forEach(x=>x.classList.toggle("on",x===b));$("#brandBox").classList.toggle("hidden",mode!=="brand")});
+
+// ---------- photos ----------
+$("#pick").onclick=()=>$("#files").click();
+$("#files").onchange=async e=>{
+  for(const f of [...e.target.files]){if(photos.length>=8)break;
+    try{photos.push(await shrink(f))}catch(_){toast("사진 하나를 읽지 못했어요")}}
+  e.target.value="";drawThumbs()};
+function shrink(file){return new Promise((res,rej)=>{const url=URL.createObjectURL(file);const img=new Image();
+  img.onload=()=>{const W=1024,s=Math.min(1,W/img.width);const c=document.createElement("canvas");c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+    c.toBlob(b=>b?res({blob:b,url:URL.createObjectURL(b)}):rej(),"image/jpeg",.85)};img.onerror=rej;img.src=url})}
+function drawThumbs(){
+  $("#thumbs").innerHTML=photos.map((p,i)=>`<div><img src="${p.url}"><span>사진${i+1}</span><b data-i="${i}">×</b></div>`).join("");
+  $("#photoInfo").textContent=photos.length?`내 사진 ${photos.length}장 · AI가 보고 알맞은 자리에 넣습니다`:"내 사진을 추가하면 AI가 보고 알맞은 자리에 넣습니다"}
+$("#thumbs").addEventListener("click",e=>{const i=e.target.dataset.i;if(i===undefined)return;photos.splice(+i,1);drawThumbs()});
+
+// ---------- style (saved per person) ----------
+async function loadStyle(){
+  $("#style").value=ls("blog_style")??DEFAULT_STYLE;
+  try{db=await claude.use("db");const u=await claude.use("user");
+    if(db&&u){const id=await u.id();styleDoc=db.collection("data/users/"+id).doc("style");
+      const snap=await styleDoc.get();const v=snap&&(snap.data?snap.data():snap);if(v&&v.text){$("#style").value=v.text;ls("blog_style",v.text)}}}
+  catch(e){/* local only */}}
+$("#saveStyle").onclick=async()=>{const t=$("#style").value.trim();ls("blog_style",t);
+  try{if(styleDoc)await styleDoc.set({text:t})}catch(e){}toast("말투 저장됨")};
+
+// ---------- prompt ----------
+function buildPrompt(){
+  const style=$("#style").value.trim(), facts=$("#facts").value.trim(), n=photos.length;
+  let p=`너는 네이버 블로그 글을 쓰는 한국어 작가다. 사람이 직접 쓴 것처럼 자연스럽게 쓰고, AI 티 나는 상투어('결론적으로', '다양한', '~에 대해 알아보겠습니다')는 피한다. 마크다운 기호(#, **, -)는 쓰지 않는다.
+
+주제: ${$("#topic").value.trim()}
+글 종류: ${MODES[mode]}
+분량: 본문 약 ${$("#len").value}자
+`;
+  if(mode==="brand"&&$("#brand").value.trim())p+=`\n브랜드 정보:\n${$("#brand").value.trim()}\n`;
+  if(facts)p+=`\n<자료>\n${facts.slice(0,6000)}\n</자료>\n위 자료에서 확인되는 사실만 쓴다. 자료에 없는 수치·발언·날짜·결과는 지어내지 않는다. 확실하지 않으면 '~로 알려졌습니다', '자세한 내용은 기사에서 확인'처럼 쓴다.\n`;
+  else p+=`\n최신 뉴스 자료가 없으니 최근 사건의 구체적 수치·발언·날짜는 쓰지 말고, 일반적으로 알려진 배경과 정보 위주로 쓴다.\n`;
+  p+=`
+제목은 항상 후킹 제목 (25~38자): 핵심 키워드를 앞쪽에, 질문형(~은?, ~일까?)·반전(알고 보니, 결국)·숫자·말줄임(…)·가운뎃점(·)으로 궁금증을 남긴다. 본문에서 실제로 답하는 내용만 약속하고, 과장·낚시성 거짓은 금지. title 에 가장 강한 1개, title_options 에 다른 각도 3개.
+`;
+  if(style)p+=`
+아래 <내글> 은 블로그 주인이 실제로 쓴 글이다. 어미·말투, 문단 길이와 끊는 위치, 다음 내용으로 넘어가는 질문·연결 문장, 제목 짓는 방식과 제목 아래 한 줄 요약 문장, 사실 전달 표현을 그대로 따라 쓴다. 글 종류 지침과 문체가 다르면 <내글> 문체를 따른다. <내글> 의 내용·사실·인물은 절대 가져오지 않는다. 제목 아래 한 줄 요약 문장이 있으면 첫 블록(type "heading")으로 쓴다.
+<내글>
+${style.slice(0,4000)}
+</내글>
+`;
+  else p+=`\n문단은 2~4문장, 문장 길이를 섞고, 이야기 흐름으로 잇고, 끝은 독자에게 건네는 한마디로.\n`;
+  if(n)p+=`
+첨부한 사진 ${n}장(순서대로 사진1~사진${n})을 모두 본문에 넣는다. 각 사진을 보고 내용과 가장 잘 맞는 자리에 type "image" 블록으로 넣고(첫 사진은 첫 문단 근처), photo 에 사진 번호(1~${n}), caption 에 사진 아래 붙일 자연스러운 한 줄(15자 안팎)을 쓴다. 사진에 실제로 보이는 것만 설명한다.
+`;
+  const auto=$("#autoImg").checked;
+  if(auto)p+=`
+이미지 카드도 직접 디자인한다 (글자 이미지라 사실과 다른 내용 금지):
+- thumb: 대표 썸네일. lines 는 제목을 2~3줄로 끊은 짧은 문구(줄마다 4~11자, 가장 궁금한 말이 크게 보이도록), sub 는 아래 작은 문구(20자 이내), emoji 는 주제를 나타내는 이모지 1~2개, colors 는 주제 분위기에 맞는 진한 배경색 2개(#hex, 그라데이션용).
+- cards: 본문 주요 소제목마다 카드 1장 + 마지막 '핵심 정리' 카드 1장 (총 2~4장). 각 카드는 emoji 1개, title(14자 이내), points(2~3개, 각 22자 이내 요약).
+- 본문 blocks 안에서 각 카드가 들어갈 자리에 {"type":"card","card":카드번호(1부터)} 블록을 넣는다(해당 소제목 바로 뒤, 핵심 정리 카드는 마지막 문단 앞).
+`;
+  p+=`
+JSON 하나만 답한다. 형식:
+{"title":"...","title_options":["...","...","..."],${auto?`"thumb":{"lines":["...","..."],"sub":"...","emoji":"...","colors":["#hex","#hex"]},"cards":[{"emoji":"...","title":"...","points":["...","..."]}],`:""}"blocks":[{"type":"heading|paragraph|quote${n?"|image":""}${auto?"|card":""}","text":"문단 내용(image·card 면 빈 문자열)"${n?`,"photo":1,"caption":"..."`:""}${auto?`,"card":1`:""}}],"tags":["태그5~10개, # 없이"]}`;
+  return p}
+
+// ---------- AI image cards (drawn on canvas, no internet needed) ----------
+const FONT="'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+function hex(c,d){return /^#[0-9a-f]{6}$/i.test(c||"")?c:d}
+function lum(h){const n=parseInt(h.slice(1),16);return(.299*(n>>16)+.587*(n>>8&255)+.114*(n&255))/255}
+function wrap(g,text,maxW){const out=[];let line="";for(const ch of String(text)){if(g.measureText(line+ch).width>maxW&&line){out.push(line);line=ch.trim()?ch:""}else line+=ch}if(line)out.push(line);return out}
+function fitLines(g,lines,maxW,size,weight,min){let s=size;while(s>min){g.font=`${weight} ${s}px ${FONT}`;if(lines.every(l=>g.measureText(l).width<=maxW))break;s-=4}return s}
+async function fontsReady(){try{await Promise.all([document.fonts.load(`900 80px 'Noto Sans KR'`),document.fonts.load(`700 40px 'Noto Sans KR'`),document.fonts.load(`500 40px 'Noto Sans KR'`)])}catch(e){}}
+function drawThumb(t,blogName){
+  const W=1080,c=document.createElement("canvas");c.width=c.height=W;const g=c.getContext("2d");
+  const a=hex(t.colors&&t.colors[0],"#1f3b73"),b=hex(t.colors&&t.colors[1],"#03a14a");
+  const gr=g.createLinearGradient(0,0,W,W);gr.addColorStop(0,a);gr.addColorStop(1,b);g.fillStyle=gr;g.fillRect(0,0,W,W);
+  g.globalAlpha=.10;g.fillStyle="#fff";g.beginPath();g.arc(W*.9,W*.12,260,0,7);g.fill();g.beginPath();g.arc(W*.05,W*.95,320,0,7);g.fill();g.globalAlpha=1;
+  const dark=(lum(a)+lum(b))/2>.62,fg=dark?"#1b1b1b":"#fff";
+  g.textAlign="center";g.textBaseline="middle";
+  g.font=`200px ${FONT}`;g.fillText(t.emoji||"📰",W/2,250);
+  const lines=(t.lines&&t.lines.length?t.lines:[post.title]).slice(0,3);
+  const size=fitLines(g,lines,W-140,118,900,56);
+  g.font=`900 ${size}px ${FONT}`;g.fillStyle=fg;g.shadowColor="#0005";g.shadowBlur=dark?0:18;
+  const top=560-(lines.length-1)*size*.62;lines.forEach((l,i)=>g.fillText(l,W/2,top+i*size*1.24));
+  g.shadowBlur=0;
+  if(t.sub){g.font=`700 46px ${FONT}`;g.fillStyle=dark?"#1b1b1bcc":"#ffffffdd";const sy=top+lines.length*size*1.24+30;
+    const w=g.measureText(t.sub).width+60;g.fillStyle=dark?"#ffffffaa":"#00000033";roundRect(g,W/2-w/2,sy-38,w,76,38);g.fill();
+    g.fillStyle=fg;g.fillText(t.sub,W/2,sy)}
+  g.font=`500 34px ${FONT}`;g.fillStyle=dark?"#1b1b1b99":"#ffffffaa";g.fillText(blogName,W/2,W-70);
+  return c.toDataURL("image/jpeg",.92)}
+function drawCard(card,i,total,accent,blogName){
+  const W=1080,c=document.createElement("canvas");c.width=W;let g=c.getContext("2d");
+  // height fits the content: measure the wrapped points first
+  g.font=`700 52px ${FONT}`;let need=400;(card.points||[]).slice(0,3).forEach(pt=>{need+=Math.max(1,Math.min(2,wrap(g,pt,W-260).length))*70+90});
+  const H=Math.max(720,need+60);c.height=H;g=c.getContext("2d");
+  g.fillStyle="#fbfbf8";g.fillRect(0,0,W,H);g.fillStyle=accent;g.fillRect(0,0,W,22);
+  g.textBaseline="middle";g.textAlign="left";
+  g.font=`120px ${FONT}`;g.fillText(card.emoji||"📌",80,170);
+  g.font=`700 34px ${FONT}`;g.fillStyle=accent;g.fillText(`POINT ${i}/${total}`,240,135);
+  const ts=fitLines(g,[card.title||""],W-320,76,900,44);g.font=`900 ${ts}px ${FONT}`;g.fillStyle="#1b1b1b";g.fillText(card.title||"",240,205);
+  g.fillStyle="#e6e6e0";g.fillRect(80,300,W-160,4);
+  let y=400;(card.points||[]).slice(0,3).forEach((pt,k)=>{
+    g.fillStyle=accent;g.beginPath();g.arc(118,y,34,0,7);g.fill();g.fillStyle="#fff";g.textAlign="center";g.font=`900 38px ${FONT}`;g.fillText(k+1,118,y+2);
+    g.textAlign="left";g.fillStyle="#2b2b2b";g.font=`700 52px ${FONT}`;const ls=wrap(g,pt,W-260);
+    ls.slice(0,2).forEach((l,j)=>g.fillText(l,180,y+j*70));y+=Math.max(1,Math.min(2,ls.length))*70+90});
+  g.textAlign="center";g.font=`500 32px ${FONT}`;g.fillStyle="#999";g.fillText(blogName,W/2,H-60);
+  return c.toDataURL("image/jpeg",.92)}
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+async function makeImages(){
+  post._img={thumb:null,cards:[]};if(!post.thumb&&!post.cards)return;
+  await fontsReady();const name=$("#blogName").value.trim()||"";ls("blog_name",name);
+  const accent=hex(post.thumb&&post.thumb.colors&&post.thumb.colors[0],"#03a14a");
+  if(post.thumb)post._img.thumb=drawThumb(post.thumb,name);
+  const cs=post.cards||[];post._img.cards=cs.map((cd,i)=>drawCard(cd,i+1,cs.length,accent,name))}
+
+// ---------- generate ----------
+$("#go").onclick=async()=>{
+  if(!$("#topic").value.trim()){status("주제를 먼저 입력하세요",true);$("#topic").focus();return}
+  if(!sample){status("이 화면에서는 AI를 쓸 수 없어요. claude.ai 에서 이 페이지를 열어 주세요.",true);return}
+  const btn=$("#go");btn.disabled=true;status("글 쓰는 중… (30초~1분)");
+  try{
+    const opts={modelTier:"default",cache:false,onText:({text})=>{if(text&&text!=="Thinking...")status("글 쓰는 중… "+text.length+"자")}};
+    if(photos.length)opts.images=photos.map(p=>p.blob);
+    let v=await sample.json(buildPrompt(),opts);
+    if(typeof v==="string")v=JSON.parse(v);
+    if(!v||!v.title||!Array.isArray(v.blocks))throw{message:"AI 응답 형식이 이상해요. 다시 눌러 주세요."};
+    post=v;ls("blog_last",JSON.stringify(v));
+    status("이미지 만드는 중…");await makeImages();
+    render();status("완성! 아래에서 확인하고 복사·저장하세요");
+    $("#result").scrollIntoView({behavior:"smooth"});
+  }catch(e){
+    const c=e&&e.code;
+    status(c==="not_granted"?"AI 사용 허락이 필요해요. 다시 눌러 허락해 주세요.":
+           c==="rate_limited"?"요청이 많아 잠시 쉬어야 해요. 1~2분 뒤 다시 시도하세요.":
+           "실패: "+((e&&e.message)||e),true);
+  }finally{btn.disabled=false}};
+
+// ---------- render + copy ----------
+function segments(){ // text pieces between images, for step-by-step pasting
+  const segs=[[]];for(const b of post.blocks){if(b.type==="image"||b.type==="card"){segs.push([]);continue}segs[segs.length-1].push(b)}
+  return segs.map(s=>s.map(b=>b.type==="quote"?`“${b.text}”`:b.text).join("\n\n"))}
+function render(){
+  $("#title").textContent=post.title;
+  $("#opts").innerHTML="<b>다른 후킹 제목</b>"+(post.title_options||[]).filter(o=>o&&o!==post.title).slice(0,3)
+    .map(o=>`<div><span>${esc(o)}</span><button class="btn" data-t="${esc(o)}">복사</button></div>`).join("");
+  let h="",seg=0,used=new Set(),usedCard=new Set();const segs=segments();const im=post._img||{cards:[]};
+  const segBtn=()=>segs[seg]&&segs[seg].trim()?`<div class="seg"><button class="btn" data-seg="${seg}">이 부분 복사</button></div>`:"";
+  const fig=(src,tag,key,cap)=>`<figure><span class="phototag">${tag}</span><br><img src="${src}"><div class="seg" style="justify-content:center;margin-top:6px"><button class="btn" data-save="${key}">📥 이 이미지 저장</button></div>${cap?`<figcaption>${esc(cap)}</figcaption>`:""}</figure>`;
+  if(im.thumb)h+=fig(im.thumb,"🖼 대표 이미지 (맨 위 · 대표사진으로 지정)","thumb");
+  h+=segBtn();
+  for(const b of post.blocks){
+    if(b.type==="card"){const k=(+b.card||0)-1;if(im.cards[k]&&!usedCard.has(k)){usedCard.add(k);h+=fig(im.cards[k],`🖼 카드${k+1} 넣을 자리`,"card"+k)}seg++;h+=segBtn();continue}
+    if(b.type==="image"){const i=(+b.photo||0)-1;const ph=photos[i];
+      if(ph&&!used.has(i)){used.add(i);h+=`<figure><span class="phototag">📷 사진${i+1} 넣을 자리</span><br><img src="${ph.url}"><figcaption>${esc(b.caption||"")}</figcaption></figure>`}
+      seg++;h+=segBtn();continue}
+    const t=esc(b.text);
+    h+=b.type==="heading"?`<p class="h">${t}</p>`:b.type==="quote"?`<p class="q">${t}</p>`:`<p>${t}</p>`}
+  im.cards.forEach((src,k)=>{if(!usedCard.has(k))h+=fig(src,`🖼 카드${k+1} (남은 카드)`,"card"+k)});
+  photos.forEach((ph,i)=>{if(!used.has(i))h+=`<figure><span class="phototag">📷 사진${i+1} (남은 사진)</span><br><img src="${ph.url}"></figure>`});
+  if(im.thumb||im.cards.length)h=`<div class="seg" style="justify-content:flex-start"><button class="btn fill" data-save="all">📥 AI 이미지 모두 저장 (${(im.thumb?1:0)+im.cards.length}장)</button></div>`+h;
+  $("#post").innerHTML=h;
+  $("#tags").textContent=(post.tags||[]).map(t=>"#"+String(t).replace(/^#/,"")).join(" ");
+  $("#result").classList.remove("hidden");$("#bar").classList.remove("hidden")}
+function fullText(){ // photo spots marked so they are easy to find in the Naver app
+  const im=post._img||{cards:[]};
+  const body=post.blocks.map(b=>b.type==="image"?`[📷 사진${b.photo} 자리 - ${b.caption||""}]`:
+    b.type==="card"?`[🖼 카드${b.card} 자리]`:b.type==="quote"?`“${b.text}”`:b.text).join("\n\n");
+  return (im.thumb?"[🖼 대표 이미지 자리]\n\n":"")+body}
+// ---------- save images to phone ----------
+let downloads=null;
+function dataBlob(u){const [h,b]=u.split(",");const bin=atob(b);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:h.slice(5).split(";")[0]})}
+async function saveImg(key){
+  const im=post._img||{cards:[]};const list=key==="all"?["thumb",...im.cards.map((_,k)=>"card"+k)]:[key];
+  if(!downloads)try{downloads=await claude.use("downloads")}catch(e){}
+  if(!downloads){toast("여기서는 저장이 안 돼요. 이미지를 길게 눌러 저장하세요");return}
+  const base=(post.title||"blog").replace(/[\\/:*?"<>|]/g,"").slice(0,20);
+  for(const k of list){const src=k==="thumb"?im.thumb:im.cards[+k.slice(4)];if(!src)continue;
+    const name=k==="thumb"?`${base}_대표.jpg`:`${base}_카드${+k.slice(4)+1}.jpg`;
+    try{await downloads.save({filename:name,data:dataBlob(src)});toast(name+" 저장됨")}
+    catch(e){if(e&&e.code==="declined"){toast("저장 취소됨");return}
+      if(e&&e.code==="rate_limited"){await new Promise(r=>setTimeout(r,1500));continue}
+      toast("저장 안 됨 - 이미지를 길게 눌러 저장하세요");return}}}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b||!post)return;
+  if(b.dataset.save)saveImg(b.dataset.save);
+  else if(b.dataset.t)copy(b.dataset.t,"제목");
+  else if(b.dataset.seg!==undefined)copy(segments()[+b.dataset.seg],"이 부분");
+  else if(b.dataset.copy==="title")copy(post.title,"제목");
+  else if(b.dataset.copy==="all")copy(fullText(),"글 전체(사진 자리 표시 포함)");
+  else if(b.dataset.copy==="tags")copy($("#tags").textContent,"태그")});
+
+// ---------- start ----------
+(async()=>{
+  $("#blogName").value=ls("blog_name")??"세상관찰자";
+  try{const last=ls("blog_last");if(last){post=JSON.parse(last);photos=[];await makeImages();render()}}catch(e){}
+  loadStyle();
+  try{sample=await claude.use("sample")}catch(e){sample=null}
+  if(!sample)status("AI 연결 대기 중… (claude.ai 에서 열었는지 확인)");else status("")})();
+</script>
+</body>
+</html>

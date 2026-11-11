@@ -1,0 +1,8 @@
+config.json
+browser_profile/
+__pycache__/
+auto_state.json
+usage.json
+posts/
+writer_auto_state.json
+_build/
