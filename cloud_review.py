@@ -8,6 +8,7 @@ env: GEMINI_API_KEY, GH_TOKEN, ISSUE_TITLE, ISSUE_BODY, SITE_URL
 """
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +36,27 @@ def notes_from(body):
     return re.sub(r'[ \t]+', " ", t).strip()
 
 
+def video_frames(data, work, i, n=3):
+    """Take n sharp-ish stills from a video (ffmpeg) -> list of jpg Paths."""
+    src = work / f"v{i}.mp4"
+    src.write_bytes(data)
+    try:
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                    "-of", "csv=p=0", str(src)], capture_output=True, text=True).stdout or 0)
+    except (OSError, ValueError):
+        return []
+    out = []
+    for k in range(n):
+        t = dur * (k + 1) / (n + 1)
+        raw, jpg = work / f"v{i}_{k}_raw.jpg", work / f"v{i}_{k}.jpg"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", str(src),
+                        "-frames:v", "1", "-q:v", "2", str(raw)])
+        if raw.exists() and images._save(raw.read_bytes(), jpg):
+            out.append(jpg)
+    print(f"동영상 {i}: {dur:.1f}초 -> 사진 {len(out)}장", flush=True)
+    return out
+
+
 def main():
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     title = os.environ.get("ISSUE_TITLE", "").strip()
@@ -51,11 +73,15 @@ def main():
         h = dict(images.UA)
         if token and re.match(r"https://(github\.com|[\w.-]*githubusercontent\.com)/", u):
             h["Authorization"] = f"token {token}"     # GitHub attachments only
-        r = requests.get(u, timeout=60, headers=h)
+        r = requests.get(u, timeout=120, headers=h)
         r.raise_for_status()
+        if r.headers.get("content-type", "").startswith("video"):
+            paths += video_frames(r.content, work, i)    # videos -> a few still photos
+            continue
         out = work / f"p{i}.jpg"
         if images._save(r.content, out):
             paths.append(out)
+    paths = paths[:8]
     if not paths:
         sys.exit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
 
