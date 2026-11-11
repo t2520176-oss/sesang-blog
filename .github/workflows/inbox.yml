@@ -1,0 +1,45 @@
+name: 공유한 사진으로 후기 만들기
+
+# 폰 갤러리 -> 공유 -> ntfy 로 보낸 사진을 5분마다 확인해서 후기 글을 만듭니다.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blog
+  cancel-in-progress: false
+
+jobs:
+  inbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pillow anthropic
+      - name: 받은 사진 확인 + 후기 쓰기
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NTFY_UPLOAD_TOPIC: ${{ secrets.NTFY_UPLOAD_TOPIC }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: python cloud_inbox.py
+      - name: 사이트에 올리기
+        run: |
+          git config user.name "blog-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs inbox_state.json 2>/dev/null || git add docs
+          git diff --cached --quiet && exit 0
+          git commit -m "공유 사진 후기 $(date +%F)"
+          git pull --rebase -q
+          git push
+      - name: 폰 알림 보내기
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python notify.py

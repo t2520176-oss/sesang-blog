@@ -8,6 +8,7 @@ env: GEMINI_API_KEY, GH_TOKEN, ISSUE_TITLE, ISSUE_BODY, SITE_URL
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,9 @@ def video_frames(data, work, i, n=3):
     """Take n sharp-ish stills from a video (ffmpeg) -> list of jpg Paths."""
     src = work / f"v{i}.mp4"
     src.write_bytes(data)
+    if not shutil.which("ffmpeg"):           # GitHub runner: install on first video only
+        subprocess.run("sudo apt-get update -q && sudo apt-get install -y -q ffmpeg", shell=True,
+                       stdout=subprocess.DEVNULL)
     try:
         dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                     "-of", "csv=p=0", str(src)], capture_output=True, text=True).stdout or 0)
@@ -57,15 +61,8 @@ def video_frames(data, work, i, n=3):
     return out
 
 
-def main():
-    key = os.environ.get("GEMINI_API_KEY", "").strip()
-    title = os.environ.get("ISSUE_TITLE", "").strip()
-    body = os.environ.get("ISSUE_BODY", "") or ""
-    token = os.environ.get("GH_TOKEN", "")
-    urls = photo_urls(body)
-    if not urls:
-        sys.exit("사진이 없습니다. 이슈 본문에 물건 사진을 1장 이상 붙여 주세요.")
-
+def download(urls, token=""):
+    """urls (photos or videos) -> list of jpg Paths (videos give 3 stills each)."""
     work = HERE / "_review"
     work.mkdir(exist_ok=True)
     paths = []
@@ -81,27 +78,39 @@ def main():
         out = work / f"p{i}.jpg"
         if images._save(r.content, out):
             paths.append(out)
-    paths = paths[:8]
-    if not paths:
-        sys.exit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
+    return paths[:8]
 
-    # title is required by GitHub, so anything short ("1", ".", "ㅎ", "후기") means "work it out from the photos"
-    hint = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
-    notes = notes_from(body)
+
+def make_review(paths, hint="", notes=""):
+    """Write the review from photo Paths, publish it. Returns (title, url)."""
+    if not paths:
+        raise SystemExit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
     extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}\n" if notes else ""
-    if hint:   # the title may be a product name or just a note ("써보고말해요")
+    if hint:   # may be a product name or just a note ("써보고말해요")
         extra += (f"사용자가 붙인 제목: '{hint}' - 제품 이름이면 그대로 쓰고, 제품 이름이 아니면 "
                   "메모로만 참고한다. 제품은 사진을 보고 파악한다.\n")
-    product = ""
     style_f = HERE / "style_review.txt"
     style = style_f.read_text(encoding="utf-8") if style_f.exists() else ""
-    print(f"후기 쓰는 중: {product or '(사진으로 파악)'} / 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
-    post = writer.generate_post(key, product, "review", 1500, extra=extra, style=style,
+    print(f"후기 쓰는 중: 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
+    post = writer.generate_post(key, "", "review", 1500, extra=extra, style=style,
                                 own_photos=[p.read_bytes() for p in paths])
     name = post["title"].split(",")[0].split("…")[0][:20]
-    url = cloud_build.publish(post, name, own=paths, kind="review")
+    return post["title"], cloud_build.publish(post, name, own=paths, kind="review")
+
+
+def main():
+    title = os.environ.get("ISSUE_TITLE", "").strip()
+    body = os.environ.get("ISSUE_BODY", "") or ""
+    urls = photo_urls(body)
+    if not urls:
+        sys.exit("사진이 없습니다. 이슈 본문에 물건 사진을 1장 이상 붙여 주세요.")
+    paths = download(urls, os.environ.get("GH_TOKEN", ""))
+    # GitHub needs a title, so short ones ("1", "후기") mean "work it out from the photos"
+    hint = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
+    t, url = make_review(paths, hint, notes_from(body))
     (HERE / "_issue_reply.txt").write_text(
-        f"✅ 후기 글 완성: **{post['title']}**\n\n{url}\n\n열어서 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.",
+        f"✅ 후기 글 완성: **{t}**\n\n{url}\n\n열어서 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.",
         encoding="utf-8")
 
 
