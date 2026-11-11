@@ -142,7 +142,8 @@ INDEX_PAGE = """<!DOCTYPE html>
 </style></head><body>
 <header><h1>📝 세상관찰자 글 창고</h1>
 <p>매일 화제 이슈로 사진 포함 글이 자동으로 쌓입니다. 글을 열어 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.
-사진은 길게 눌러 저장할 수 있어요.</p></header>
+사진은 길게 눌러 저장할 수 있어요.</p>
+<a href="up/" style="display:inline-block;margin-top:10px;background:#fff;color:#03a14a;font-weight:700;padding:8px 14px;border-radius:20px;text-decoration:none">📷 내돈내산 후기 올리기</a></header>
 <main>{{ROWS}}</main>
 </body></html>
 """
