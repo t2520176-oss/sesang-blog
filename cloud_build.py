@@ -4,7 +4,7 @@ Runs on GitHub's server once a day (or by hand with a topic). It never touches N
 it only builds pages in docs/ that the phone opens, and the user pastes into Naver.
 
 env: GEMINI_API_KEY (required), PIXABAY_KEY (optional), TOPIC (optional, manual run),
-     THRESHOLD (default 1000), PHOTOS (default 3), LENGTH (default 1500)
+     THRESHOLD (default 5000), PHOTOS (default 3), LENGTH (default 1500)
 """
 import datetime as dt
 import html
@@ -52,7 +52,7 @@ def main():
     if not key:
         sys.exit("GEMINI_API_KEY 비밀값이 없습니다 (GitHub 저장소 Settings > Secrets).")
     manual = os.environ.get("TOPIC", "").strip()
-    threshold = int(os.environ.get("THRESHOLD") or 1000)
+    threshold = int(os.environ.get("THRESHOLD") or 5000)
     photos = int(os.environ.get("PHOTOS") or 3)
     length = int(os.environ.get("LENGTH") or 1500)
     style = (HERE / "style.txt").read_text(encoding="utf-8") if (HERE / "style.txt").exists() else ""
@@ -90,6 +90,10 @@ def main():
         shutil.rmtree(POSTS / old["slug"], ignore_errors=True)
     items = items[:KEEP]
     write_index(items)
+    site = os.environ.get("SITE_URL", "").rstrip("/")
+    (HERE / "_notify.json").write_text(json.dumps({
+        "title": post["title"], "keyword": keyword, "traffic": traffic,
+        "url": f"{site}/posts/{slug}/" if site else ""}, ensure_ascii=False), encoding="utf-8")
     log("완성:", post["title"])
 
 
