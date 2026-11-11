@@ -66,15 +66,27 @@
     <button data-m="home">홈판용<br><small>관심 끄는 이야기</small></button>
     <button data-m="search" class="on">검색용<br><small>궁금증에 답하기</small></button>
     <button data-m="brand">브랜드<br><small>내 사업 알리기</small></button>
+    <button data-m="review">내돈내산<br><small>산 물건 후기</small></button>
   </div>
   <label for="topic">주제 / 키워드</label>
   <input type="text" id="topic" placeholder="예: 포체티노 맨유 감독설">
+  <div id="reviewBox" class="hidden">
+    <p class="hint" style="margin:8px 0 0">📷 산 물건 사진만 넣고 [글 만들기]를 누르면 AI가 사진을 보고 후기를 씁니다. 아래 칸은 비워도 돼요.</p>
+    <button class="btn fill" id="pick2" style="margin-top:8px;width:100%">📷 물건 사진 넣기 (여러 장 가능)</button>
+    <div class="thumbs" id="thumbs2"></div>
+    <label for="rvBuy">가격·구매처 (선택)</label>
+    <input type="text" id="rvBuy" placeholder="예: 쿠팡 29,900원 / 다이소 5천원">
+    <label for="rvNote">좋았던 점·아쉬운 점·써본 기간 (선택, 짧게)</label>
+    <textarea id="rvNote" rows="3" placeholder="예: 2주 써봄. 가볍고 소음 적음. 충전선 짧은 게 아쉬움"></textarea>
+  </div>
+  <div id="issueBox">
   <div class="links">
     <a href="https://trends.google.co.kr/trending?geo=KR" target="_blank" rel="noopener">지금 인기 검색어 보기 ↗</a>
     <a href="https://news.naver.com/main/ranking/popularDay.naver" target="_blank" rel="noopener">네이버 뉴스 랭킹 ↗</a>
   </div>
   <label for="facts">참고할 뉴스 제목·기사 내용 (붙여넣기 권장)</label>
   <textarea id="facts" rows="4" placeholder="기사 제목이나 본문을 붙여넣으면 그 안의 사실만으로 씁니다. 비워 두면 일반 정보 위주로 씁니다."></textarea>
+  </div>
   <div id="brandBox" class="hidden">
     <label for="brand">브랜드 정보 (상호, 상품, 강점, 연락처 등)</label>
     <textarea id="brand" rows="3"></textarea>
@@ -103,8 +115,8 @@
   <label for="extra">추가 요청 (선택)</label>
   <input type="text" id="extra" placeholder="예: 마지막에 댓글 유도 한 줄">
   <details style="margin-top:12px">
-    <summary>내 말투 설정 (내 블로그 글 붙여넣기)</summary>
-    <p class="hint">내 블로그 글 1~2개를 붙여넣으면 말투·문단 끊기·제목 짓는 방식을 따라 씁니다. 내용은 가져오지 않습니다.</p>
+    <summary>내 말투 설정 <span id="styleFor"></span></summary>
+    <p class="hint">이슈 블로그와 내돈내산 블로그의 말투는 따로 저장됩니다. 그 블로그 글 1~2개를 붙여넣으면 말투·문단 끊기·제목 짓는 방식을 따라 씁니다. 내용은 가져오지 않습니다.</p>
     <textarea id="style" rows="8"></textarea>
     <button class="btn" id="saveStyle" style="margin-top:6px">말투 저장</button>
   </details>
@@ -141,6 +153,7 @@ const $ = s => document.querySelector(s);
 const MODES = {
   home: "네이버 블로그 홈 피드용. 첫 문단에서 호기심을 끌고, 공감 가는 이야기와 느낌을 담는다. 소제목 3~5개.",
   search: "검색으로 들어온 사람이 궁금한 점을 바로 해결하도록 쓰는 정보성 글. 제목과 첫 문단에 핵심 키워드를 넣고, 소제목마다 질문 하나에 답한다. 마지막에 핵심 정리.",
+  review: "내돈내산 제품 후기. 첨부한 사진을 보고 어떤 제품인지 파악해서 쓴다. 구성: 왜 샀는지(공감되는 계기) → 첫인상·외관·구성품(사진) → 직접 써보니 좋았던 점 → 아쉬운 점(솔직하게 1~2개) → 이런 분께 추천 → 한 줄 총평. 소제목 3~5개. 광고 같은 과장 없이 실제 쓴 사람처럼 쓴다.",
   brand: "아래 브랜드 정보를 자연스럽게 소개하는 글. 과장 광고나 검증 안 된 효능 주장은 하지 않는다. 고객의 문제 → 해결 방법 → 브랜드 소개 → 이용 방법 순서, 끝에 부드러운 행동 유도."
 };
 const DEFAULT_STYLE = `버닝썬 사건 이후 승리의 근황은? 결혼·혼인신고·출산 소식까지
@@ -166,11 +179,17 @@ async function copy(text,what){
     let ok=false;try{ok=document.execCommand("copy")}catch(_){}a.remove();toast(ok?what+" 복사됨":"복사가 막혔어요. 글을 길게 눌러 직접 복사하세요")}}
 
 // ---------- mode buttons ----------
-$("#modes").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;mode=b.dataset.m;
-  document.querySelectorAll("#modes button").forEach(x=>x.classList.toggle("on",x===b));$("#brandBox").classList.toggle("hidden",mode!=="brand")});
+$("#modes").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setMode(b.dataset.m,true)});
+function setMode(m,user){mode=m;ls("blog_mode",m);
+  document.querySelectorAll("#modes button").forEach(x=>x.classList.toggle("on",x.dataset.m===m));
+  $("#brandBox").classList.toggle("hidden",m!=="brand");$("#reviewBox").classList.toggle("hidden",m!=="review");
+  $("#issueBox").classList.toggle("hidden",m==="review");
+  $("#topic").placeholder=m==="review"?"제품 이름 (모르면 비워두세요 - 사진으로 알아봅니다)":"예: 포체티노 맨유 감독설";
+  if(user)$("#autoImg").checked=m!=="review";   // review: the real photos are the images
+  loadStyle()}
 
 // ---------- photos ----------
-$("#pick").onclick=()=>$("#files").click();
+$("#pick").onclick=()=>$("#files").click();$("#pick2").onclick=()=>$("#files").click();
 $("#files").onchange=async e=>{
   for(const f of [...e.target.files]){if(photos.length>=8)break;
     try{photos.push(await shrink(f))}catch(_){toast("사진 하나를 읽지 못했어요")}}
@@ -180,18 +199,21 @@ function shrink(file){return new Promise((res,rej)=>{const url=URL.createObjectU
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
     c.toBlob(b=>b?res({blob:b,url:URL.createObjectURL(b)}):rej(),"image/jpeg",.85)};img.onerror=rej;img.src=url})}
 function drawThumbs(){
-  $("#thumbs").innerHTML=photos.map((p,i)=>`<div><img src="${p.url}"><span>사진${i+1}</span><b data-i="${i}">×</b></div>`).join("");
+  $("#thumbs").innerHTML=$("#thumbs2").innerHTML=photos.map((p,i)=>`<div><img src="${p.url}"><span>사진${i+1}</span><b data-i="${i}">×</b></div>`).join("");
   $("#photoInfo").textContent=photos.length?`내 사진 ${photos.length}장 · AI가 보고 알맞은 자리에 넣습니다`:"내 사진을 추가하면 AI가 보고 알맞은 자리에 넣습니다"}
-$("#thumbs").addEventListener("click",e=>{const i=e.target.dataset.i;if(i===undefined)return;photos.splice(+i,1);drawThumbs()});
+["#thumbs","#thumbs2"].forEach(q=>$(q).addEventListener("click",e=>{const i=e.target.dataset.i;if(i===undefined)return;photos.splice(+i,1);drawThumbs()}));
 
 // ---------- style (saved per person) ----------
+const styleKey=()=>mode==="review"?"blog_style_review":"blog_style";
 async function loadStyle(){
-  $("#style").value=ls("blog_style")??DEFAULT_STYLE;
-  try{db=await claude.use("db");const u=await claude.use("user");
-    if(db&&u){const id=await u.id();styleDoc=db.collection("data/users/"+id).doc("style");
-      const snap=await styleDoc.get();const v=snap&&(snap.data?snap.data():snap);if(v&&v.text){$("#style").value=v.text;ls("blog_style",v.text)}}}
+  const key=styleKey();$("#style").value=ls(key)??(mode==="review"?"":DEFAULT_STYLE);
+  $("#styleFor").textContent=mode==="review"?"(내돈내산 블로그용)":"(이슈 블로그용)";styleDoc=null;
+  try{if(!db)db=await claude.use("db");const u=await claude.use("user");
+    if(db&&u){const id=await u.id();const d=db.collection("data/users/"+id).doc(mode==="review"?"style_review":"style");
+      if(styleKey()!==key)return;styleDoc=d;
+      const snap=await d.get();const v=snap&&(snap.data?snap.data():snap);if(v&&v.text&&styleKey()===key){$("#style").value=v.text;ls(key,v.text)}}}
   catch(e){/* local only */}}
-$("#saveStyle").onclick=async()=>{const t=$("#style").value.trim();ls("blog_style",t);
+$("#saveStyle").onclick=async()=>{const t=$("#style").value.trim();ls(styleKey(),t);
   try{if(styleDoc)await styleDoc.set({text:t})}catch(e){}toast("말투 저장됨")};
 
 // ---------- prompt ----------
@@ -199,12 +221,15 @@ function buildPrompt(){
   const style=$("#style").value.trim(), facts=$("#facts").value.trim(), n=photos.length;
   let p=`너는 네이버 블로그 글을 쓰는 한국어 작가다. 사람이 직접 쓴 것처럼 자연스럽게 쓰고, AI 티 나는 상투어('결론적으로', '다양한', '~에 대해 알아보겠습니다')는 피한다. 마크다운 기호(#, **, -)는 쓰지 않는다.
 
-주제: ${$("#topic").value.trim()}
+주제: ${$("#topic").value.trim()||(mode==="review"?"사진 속 제품 (사진을 보고 무엇인지 파악)":"")}
 글 종류: ${MODES[mode]}
 분량: 본문 약 ${$("#len").value}자
 `;
   if(mode==="brand"&&$("#brand").value.trim())p+=`\n브랜드 정보:\n${$("#brand").value.trim()}\n`;
-  if(facts)p+=`\n<자료>\n${facts.slice(0,6000)}\n</자료>\n위 자료에서 확인되는 사실만 쓴다. 자료에 없는 수치·발언·날짜·결과는 지어내지 않는다. 확실하지 않으면 '~로 알려졌습니다', '자세한 내용은 기사에서 확인'처럼 쓴다.\n`;
+  if(mode==="review"){const buy=$("#rvBuy").value.trim(),note=$("#rvNote").value.trim();
+    if(buy)p+=`\n가격·구매처: ${buy}\n`;if(note)p+=`\n내가 써본 느낌 메모: ${note}\n`;
+    p+=`\n사실은 사진에 실제로 보이는 것과 위 메모만 쓴다. 제품명·브랜드는 사진 속 글자로 확인될 때만 쓰고, 아니면 일반 명칭으로 쓴다. 메모에 없는 가격·스펙·성분·효능은 지어내지 않는다. 메모가 없으면 사진으로 알 수 있는 디자인·크기감·구성·마감 위주로 쓰고, 사용감은 사진과 어긋나지 않는 범위에서 자연스럽게 쓴다. 의학적 효과 주장은 금지. 제목 맨 앞에는 제품명(또는 일반 명칭)을 넣는다.\n`}
+  else if(facts)p+=`\n<자료>\n${facts.slice(0,6000)}\n</자료>\n위 자료에서 확인되는 사실만 쓴다. 자료에 없는 수치·발언·날짜·결과는 지어내지 않는다. 확실하지 않으면 '~로 알려졌습니다', '자세한 내용은 기사에서 확인'처럼 쓴다.\n`;
   else p+=`\n최신 뉴스 자료가 없으니 최근 사건의 구체적 수치·발언·날짜는 쓰지 말고, 일반적으로 알려진 배경과 정보 위주로 쓴다.\n`;
   p+=`
 제목은 항상 후킹 제목 (25~38자): 핵심 키워드를 앞쪽에, 질문형(~은?, ~일까?)·반전(알고 보니, 결국)·숫자·말줄임(…)·가운뎃점(·)으로 궁금증을 남긴다. 본문에서 실제로 답하는 내용만 약속하고, 과장·낚시성 거짓은 금지. title 에 가장 강한 1개, title_options 에 다른 각도 3개.
@@ -283,7 +308,8 @@ async function makeImages(){
 
 // ---------- generate ----------
 $("#go").onclick=async()=>{
-  if(!$("#topic").value.trim()){status("주제를 먼저 입력하세요",true);$("#topic").focus();return}
+  if(mode==="review"){if(!photos.length){status("산 물건 사진을 먼저 넣어 주세요",true);return}}
+  else if(!$("#topic").value.trim()){status("주제를 먼저 입력하세요",true);$("#topic").focus();return}
   if(!sample){status("이 화면에서는 AI를 쓸 수 없어요. claude.ai 에서 이 페이지를 열어 주세요.",true);return}
   const btn=$("#go");btn.disabled=true;status("글 쓰는 중… (30초~1분)");
   try{
@@ -360,8 +386,8 @@ document.addEventListener("click",e=>{
 // ---------- start ----------
 (async()=>{
   $("#blogName").value=ls("blog_name")??"세상관찰자";
+  setMode(ls("blog_mode")||"search",false);
   try{const last=ls("blog_last");if(last){post=JSON.parse(last);photos=[];await makeImages();render()}}catch(e){}
-  loadStyle();
   try{sample=await claude.use("sample")}catch(e){sample=null}
   if(!sample)status("AI 연결 대기 중… (claude.ai 에서 열었는지 확인)");else status("")})();
 </script>
