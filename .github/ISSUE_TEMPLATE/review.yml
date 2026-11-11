@@ -1,0 +1,16 @@
+name: "📷 내돈내산 후기"
+description: 산 물건 사진만 올리면 후기 글을 만들어 드려요
+title: "후기"
+body:
+  - type: textarea
+    id: photos
+    attributes:
+      label: 물건 사진
+      description: 아래 칸을 누르고 사진을 넣으세요 (여러 장 가능)
+    validations:
+      required: true
+  - type: input
+    id: memo
+    attributes:
+      label: 메모 (선택)
+      placeholder: "예: 쿠팡 2만원, 2주 써봄, 가볍고 조용함"

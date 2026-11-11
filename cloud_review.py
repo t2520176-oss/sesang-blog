@@ -30,6 +30,7 @@ def photo_urls(body):
 def notes_from(body):
     t = re.sub(r'!\[[^\]]*\]\([^)]*\)|<img[^>]*>', " ", body)
     t = re.sub(r'https?://github\.com/user-attachments/\S+', " ", t)
+    t = re.sub(r'^###.*$|_No response_', " ", t, flags=re.M)      # issue-form headings
     return re.sub(r'[ \t]+', " ", t).strip()
 
 
