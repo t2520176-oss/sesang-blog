@@ -46,7 +46,10 @@ def main():
     work.mkdir(exist_ok=True)
     paths = []
     for i, u in enumerate(urls, 1):
-        r = requests.get(u, timeout=60, headers={"Authorization": f"token {token}"} if token else {})
+        h = dict(images.UA)
+        if token and re.match(r"https://(github\.com|[\w.-]*githubusercontent\.com)/", u):
+            h["Authorization"] = f"token {token}"     # GitHub attachments only
+        r = requests.get(u, timeout=60, headers=h)
         r.raise_for_status()
         out = work / f"p{i}.jpg"
         if images._save(r.content, out):
