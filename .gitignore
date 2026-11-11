@@ -3,6 +3,6 @@ browser_profile/
 __pycache__/
 auto_state.json
 usage.json
-posts/
+/posts/
 writer_auto_state.json
 _build/
