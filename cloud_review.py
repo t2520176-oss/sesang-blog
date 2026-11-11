@@ -24,6 +24,7 @@ NO_NAME = {"", "후기", "리뷰", "내돈내산", "review", "사진", "new issu
 def photo_urls(body):
     urls = re.findall(r'!\[[^\]]*\]\((https?://[^)\s]+)\)', body)
     urls += re.findall(r'<img[^>]+src="(https?://[^"]+)"', body)
+    urls += re.findall(r'https://github\.com/user-attachments/assets/[\w-]+', body)   # phone app: bare links
     return list(dict.fromkeys(urls))[:8]
 
 
@@ -59,15 +60,19 @@ def main():
         sys.exit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
 
     # title is required by GitHub, so anything short ("1", ".", "ㅎ", "후기") means "work it out from the photos"
-    product = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
+    hint = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
     notes = notes_from(body)
-    extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}" if notes else ""
+    extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}\n" if notes else ""
+    if hint:   # the title may be a product name or just a note ("써보고말해요")
+        extra += (f"사용자가 붙인 제목: '{hint}' - 제품 이름이면 그대로 쓰고, 제품 이름이 아니면 "
+                  "메모로만 참고한다. 제품은 사진을 보고 파악한다.\n")
+    product = ""
     style_f = HERE / "style_review.txt"
     style = style_f.read_text(encoding="utf-8") if style_f.exists() else ""
     print(f"후기 쓰는 중: {product or '(사진으로 파악)'} / 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
     post = writer.generate_post(key, product, "review", 1500, extra=extra, style=style,
                                 own_photos=[p.read_bytes() for p in paths])
-    name = product or post["title"].split()[0]
+    name = post["title"].split(",")[0].split("…")[0][:20]
     url = cloud_build.publish(post, name, own=paths, kind="review")
     (HERE / "_issue_reply.txt").write_text(
         f"✅ 후기 글 완성: **{post['title']}**\n\n{url}\n\n열어서 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.",

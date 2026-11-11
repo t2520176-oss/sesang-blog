@@ -3,7 +3,7 @@ name: 내돈내산 후기 만들기
 # 폰 GitHub 앱에서 이 저장소에 새 이슈(사진 첨부)를 만들면 실행됩니다. 저장소 주인이 만든 이슈만 처리.
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]   # 실패했으면 이슈를 닫았다가 다시 열면 재시도
 
 permissions:
   contents: write
