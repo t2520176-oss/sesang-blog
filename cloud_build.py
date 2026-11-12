@@ -4,7 +4,10 @@ Runs on GitHub's server once a day (or by hand with a topic). It never touches N
 it only builds pages in docs/ that the phone opens, and the user pastes into Naver.
 
 env: GEMINI_API_KEY (required), PIXABAY_KEY (optional), TOPIC (optional, manual run),
-     THRESHOLD (default 5000), PHOTOS (default 3), LENGTH (default 1500)
+     THRESHOLD (default 1000), PHOTOS (default 3), LENGTH (default 1500)
+
+Up to 3 auto posts a day (KST 8, 12, 19 h slots; a missed slot is caught up on the next run).
+Each post aims at a narrower Naver autocomplete phrase ("이종석 아이유"), not the bare keyword.
 """
 import datetime as dt
 import html
@@ -13,6 +16,8 @@ import os
 import shutil
 import sys
 from pathlib import Path
+
+import requests
 
 import compose
 import trends
@@ -24,6 +29,23 @@ POSTS = DOCS / "posts"
 INDEX = DOCS / "posts.json"
 KEEP = 40                                   # keep the newest N posts on the site
 KST = dt.timezone(dt.timedelta(hours=9))
+
+
+SLOTS = (8, 12, 19)                         # KST hours: one auto post per slot
+SKIP = ("나무위키", "위키", "mbti", "인스타", "유튜브", "갤러리")
+
+
+def related(keyword):
+    """Naver search autocomplete phrases for the keyword (public, no login)."""
+    try:
+        r = requests.get("https://ac.search.naver.com/nx/ac", timeout=15, params={
+            "q": keyword, "con": "1", "frm": "nv", "ans": "2", "r_format": "json",
+            "r_enc": "UTF-8", "r_unicode": "0", "t_koreng": "1", "st": "100"})
+        got = [x[0] for x in r.json()["items"][0]]
+    except Exception as e:  # noqa: BLE001
+        log("자동완성 읽기 실패:", e)
+        return []
+    return [g for g in got if g != keyword and not any(k in g.lower() for k in SKIP)][:8]
 
 
 def log(*a):
@@ -40,10 +62,11 @@ def pick_topic(manual, threshold, seen):
     if manual:
         t = next((t for t in hot if t["keyword"] == manual), None)
         return manual, ("search" if t else "home"), (t["news"] if t else None), (t["traffic"] if t else "")
-    hot = [t for t in hot if t["traffic_n"] >= threshold and t["keyword"] not in seen]
-    if not hot:
+    hot = [t for t in hot if t["keyword"] not in seen]
+    big = [t for t in hot if t["traffic_n"] >= threshold] or [t for t in hot if t["traffic_n"] >= 200]
+    if not big:
         return None
-    t = max(hot, key=lambda x: x["traffic_n"])
+    t = max(big, key=lambda x: x["traffic_n"])
     return t["keyword"], "search", t["news"], t["traffic"]
 
 
@@ -52,15 +75,18 @@ def main():
     if not key:
         sys.exit("GEMINI_API_KEY 비밀값이 없습니다 (GitHub 저장소 Settings > Secrets).")
     manual = os.environ.get("TOPIC", "").strip()
-    threshold = int(os.environ.get("THRESHOLD") or 5000)
+    threshold = int(os.environ.get("THRESHOLD") or 1000)
     photos = int(os.environ.get("PHOTOS") or 3)
     length = int(os.environ.get("LENGTH") or 1500)
     style = (HERE / "style.txt").read_text(encoding="utf-8") if (HERE / "style.txt").exists() else ""
 
     items = json.loads(INDEX.read_text(encoding="utf-8")) if INDEX.exists() else []
-    today = dt.datetime.now(KST).date().isoformat()
-    if not manual and any(i["date"].startswith(today) and i.get("auto") for i in items):
-        log("오늘 자동 글은 이미 만들었습니다.")
+    now = dt.datetime.now(KST)
+    today = now.date().isoformat()
+    done = sum(1 for i in items if i["date"].startswith(today) and i.get("auto"))
+    due = sum(1 for h in SLOTS if now.hour >= h)
+    if not manual and done >= due:
+        log(f"오늘 자동 글 {done}개 - 다음 시간대까지 기다립니다 ({'/'.join(map(str, SLOTS))}시).")
         return write_index(items)
 
     got = pick_topic(manual, threshold, {i["keyword"] for i in items})
@@ -68,8 +94,15 @@ def main():
         log(f"검색량 {threshold}+ 새 이슈가 없습니다.")
         return write_index(items)
     keyword, mode, news, traffic = got
-    log(f"주제: {keyword} ({traffic or '직접 입력'}) - 글 쓰는 중...")
-    post = writer.generate_post(key, keyword, mode, length, news=news, photos=photos, style=style)
+    sub = related(keyword)
+    log(f"주제: {keyword} ({traffic or '직접 입력'}) / 세부 키워드 후보: {sub} - 글 쓰는 중...")
+    extra = ""
+    if sub:
+        extra = ("네이버 자동완성 검색어: " + ", ".join(sub) + "\n"
+                 "이 중 뉴스 내용과 맞는 세부 키워드 1개를 골라 제목 맨 앞에 그대로 쓰고(띄어쓰기 그대로), "
+                 "본문에 자연스럽게 3~4번 넣는다. 관련 있는 다른 검색어 1~2개는 소제목에 녹인다. "
+                 "뉴스와 상관없는 검색어는 쓰지 않는다.\n")
+    post = writer.generate_post(key, keyword, mode, length, extra=extra, news=news, photos=photos, style=style)
 
     publish(post, keyword, traffic, auto=not manual, items=items)
 

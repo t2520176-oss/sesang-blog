@@ -1,0 +1,38 @@
+name: 타이머 (매시간 글 확인)
+
+# GitHub's own cron barely fires on this repo, so this job keeps itself alive:
+# it starts the blog + inbox jobs every hour for ~5 hours, then starts a fresh copy of itself.
+# (workflow_dispatch made with GITHUB_TOKEN is allowed to start new runs.)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"    # backup: restarts the chain if it ever stops
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: timer
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: 매시간 글 확인 시작
+        run: |
+          for i in 1 2 3 4 5; do
+            h=$(TZ=Asia/Seoul date +%H)
+            echo "$(TZ=Asia/Seoul date '+%F %H:%M') 확인"
+            if [ "$h" -ge 8 ] && [ "$h" -le 23 ]; then gh workflow run blog.yml || true; fi
+            gh workflow run inbox.yml || true
+            [ "$i" -lt 5 ] && sleep 3600
+          done
+      - name: 다음 타이머 예약
+        if: ${{ !cancelled() }}
+        run: gh workflow run timer.yml
