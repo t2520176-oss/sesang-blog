@@ -83,10 +83,11 @@ def main():
     items = json.loads(INDEX.read_text(encoding="utf-8")) if INDEX.exists() else []
     now = dt.datetime.now(KST)
     today = now.date().isoformat()
-    done = sum(1 for i in items if i["date"].startswith(today) and i.get("auto"))
-    due = sum(1 for h in SLOTS if now.hour >= h)
-    if not manual and done >= due:
-        log(f"오늘 자동 글 {done}개 - 다음 시간대까지 기다립니다 ({'/'.join(map(str, SLOTS))}시).")
+    passed = [h for h in SLOTS if now.hour >= h]
+    # one post per slot; a missed slot is not piled up later (no 3 posts at night)
+    start = f"{today} {passed[-1]:02d}:00" if passed else None
+    if not manual and (not start or any(i.get("auto") and i["date"] >= start for i in items)):
+        log(f"이번 시간대 글은 이미 있음 - 다음 시간대까지 기다립니다 ({'/'.join(map(str, SLOTS))}시).")
         return write_index(items)
 
     got = pick_topic(manual, threshold, {i["keyword"] for i in items})
