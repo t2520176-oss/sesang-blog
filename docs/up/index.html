@@ -33,6 +33,10 @@
   <input type="text" id="memo" placeholder="메모 (선택) 예: 쿠팡 2만원, 2주 써봄">
   <button class="big" id="send" disabled>보내기</button>
   <div id="msg"></div>
+  <details class="card" style="margin-top:20px"><summary><b>⚡ 바로 쓰기 설정</b> <small id="keyState"></small></summary>
+   <small>GitHub에서 만든 키(github_pat_…)를 한 번 붙여넣으면, 보내자마자 글을 씁니다.</small>
+   <input type="text" id="key" placeholder="github_pat_..." autocapitalize="off" autocomplete="off" style="margin-top:8px">
+   <button class="big" id="saveKey" style="padding:14px;font-size:16px">키 저장</button></details>
   <p style="text-align:center;margin-top:24px"><a href="../">📝 글 창고 보기</a></p>
  </div>
 </main>
@@ -62,11 +66,24 @@ $("#send").onclick=async()=>{
       const blob=await shrink(files[i]);
       const r=await fetch(url,{method:"PUT",body:blob,headers:{"Filename":`photo${i+1}.jpg`}});
       if(!r.ok)throw new Error("사진 전송 실패 "+r.status)}
-    $("#msg").textContent="✅ 보냈어요!\n5~15분 뒤 \"후기 글 완성\" 알림이 옵니다.\n다른 물건은 3분 뒤에 보내 주세요.";
+    const go=await kick();
+    $("#msg").textContent=go?"✅ 보냈어요! 바로 글을 쓰기 시작했어요.\n2~3분 뒤 \"후기 글 완성\" 알림이 옵니다.":
+      "✅ 보냈어요!\n자동 확인 때 글을 씁니다 (늦으면 몇 시간).\n바로 쓰게 하려면 아래 [바로 쓰기 설정]을 해 주세요.";
     files=[];$("#thumbs").innerHTML="";$("#memo").value="";b.textContent="보내기"
   }catch(e){$("#msg").textContent="❌ "+e.message+"\n인터넷을 확인하고 다시 눌러 주세요.";b.disabled=false}};
-{const m=location.hash.match(/^#t=(sesang-up-[a-z0-9]+)$/);   // one-time setup link
- if(m){localStorage.setItem("up_topic",m[1]);history.replaceState(null,"",location.pathname)}}
+// start the cloud job right away (GitHub's own timer is unreliable). Token: Actions write, this repo only.
+async function kick(){const k=localStorage.getItem("gh_key");if(!k)return false;
+  try{const r=await fetch("https://api.github.com/repos/t2520176-oss/sesang-blog/actions/workflows/inbox.yml/dispatches",
+    {method:"POST",headers:{"Authorization":"Bearer "+k,"Accept":"application/vnd.github+json"},body:JSON.stringify({ref:"main",inputs:{now:"1"}})});
+    return r.status===204}catch(e){return false}}
+{const h=new URLSearchParams(location.hash.slice(1));   // one-time setup link: #t=topic&k=token
+ if(/^sesang-up-[a-z0-9]+$/.test(h.get("t")||""))localStorage.setItem("up_topic",h.get("t"));
+ if(/^github_pat_\w+$/.test(h.get("k")||""))localStorage.setItem("gh_key",h.get("k"));
+ if(location.hash)history.replaceState(null,"",location.pathname)}
+$("#saveKey").onclick=()=>{const k=$("#key").value.trim();if(!/^github_pat_\w+$/.test(k)){alert("github_pat_ 로 시작하는 키를 붙여넣어 주세요");return}
+  localStorage.setItem("gh_key",k);$("#key").value="";keyInfo();alert("저장됨! 이제 보내면 바로 글을 씁니다.")};
+function keyInfo(){$("#keyState").textContent=localStorage.getItem("gh_key")?"✅ 설정됨 (보내면 바로 씀)":"아직 안 함"}
+keyInfo();
 show();
 </script>
 </body></html>

@@ -18,6 +18,8 @@ HERE = Path(__file__).parent
 STATE = HERE / "inbox_state.json"
 GAP = 180          # photos sent within 3 min of each other = one post
 SETTLE = 90        # wait until the newest photo is this old (user may still be sending)
+if os.environ.get("NOW"):   # started by the upload page after the last photo was sent
+    SETTLE = 0
 
 
 def fetch(topic, since):
