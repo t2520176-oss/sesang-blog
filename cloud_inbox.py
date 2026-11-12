@@ -68,7 +68,8 @@ def process(batch, st):
     """One group of photos -> one post. Returns False only when it should be retried later."""
     seen = st.setdefault("seen", [])         # photo sizes already used: a re-sent photo is skipped
     atts = [m["attachment"] for m in batch if m.get("attachment")]
-    new = [a for a in atts if a.get("size") not in seen]
+    # skip only an exact re-send; a new set that reuses one old photo keeps all its photos
+    new = atts if any(a.get("size") not in seen for a in atts) else []
     urls = [a["url"] for a in new]
     notes = " ".join(m.get("message", "") for m in batch if not m.get("attachment")
                      and m.get("message", "").strip()).strip()
