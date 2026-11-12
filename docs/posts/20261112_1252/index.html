@@ -27,9 +27,11 @@
  <button onclick="copyText(document.querySelector('h1').innerText,'제목')">① 제목 복사</button>
  <button onclick="copyAll()">② 본문 전체 복사 (사진 포함)</button>
  <button onclick="copyText(document.querySelector('.tags').innerText,'태그')">③ 태그 복사</button>
+ <button onclick="savePics()">📥 사진 한번에 저장</button>
+ <button id="shareBtn" onclick="sharePics()" style="display:none">📤 블로그 앱으로 사진 보내기</button>
  <span id="msg"></span>
  <small>네이버 블로그 [글쓰기] → 제목 칸에 ① 붙여넣기 → 본문 칸 클릭 후 ② 붙여넣기(Ctrl+V) → 발행할 때 태그 칸에 ③.<br>
- 사진이 빠지면: 본문은 [글 복사], 사진은 [사진 복사] 버튼으로 위에서부터 하나씩 붙여넣으세요.</small>
+ 폰: [📥 사진 한번에 저장] → 네이버 앱 사진 버튼 → 갤러리 'Download' 앨범에서 번호 순서대로 여러 장 한꺼번에 선택.</small>
 </div>
 <main>
  <h1>크리얼리티 필라멘트 건조기 쓰니 출력이 달라졌을까?</h1>
@@ -91,4 +93,14 @@ async function copyImg(btn){const img=btn.parentNode.querySelector('img');const 
   catch(e){console.log(e);
     // fallback: copy as html <img> (works in most editors)
     const ok=await putHtml('<img src="'+img.src+'">','');msg(ok?btn.textContent.replace(' 복사','')+' 복사됨 → Ctrl+V':'사진 복사 실패 - 글 폴더의 사진 파일을 끌어다 놓으세요')}}
+function picFiles(){const name=(document.querySelector('h1').innerText.replace(/[^\w가-힣]+/g,'_').slice(0,20))||'photo';
+  return [...document.querySelectorAll('#post img')].map((im,i)=>{const [h,b]=im.src.split(',');const bin=atob(b),u=new Uint8Array(bin.length);
+    for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k);
+    return new File([u],name+'_'+String(i+1).padStart(2,'0')+'.jpg',{type:(h.match(/data:([^;]+)/)||[,'image/jpeg'])[1]})})}
+async function savePics(){const fs=picFiles();if(!fs.length){msg('사진이 없어요');return}
+  for(let i=0;i<fs.length;i++){const a=document.createElement('a');a.href=URL.createObjectURL(fs[i]);a.download=fs[i].name;
+    document.body.appendChild(a);a.click();a.remove();msg('사진 저장 중 '+(i+1)+'/'+fs.length);await new Promise(r=>setTimeout(r,600))}
+  msg('사진 '+fs.length+'장 저장됨 → 갤러리 Download 앨범 (여러 번 다운로드 허용을 물으면 [허용])')}
+async function sharePics(){const fs=picFiles();try{await navigator.share({files:fs});msg('보냈어요')}catch(e){if(e.name!=='AbortError')msg('보내기 실패 - [사진 한번에 저장]을 쓰세요')}}
+try{if(navigator.canShare&&navigator.canShare({files:[new File([new Uint8Array(1)],'a.jpg',{type:'image/jpeg'})]}))document.getElementById('shareBtn').style.display=''}catch(e){}
 </script></body></html>
