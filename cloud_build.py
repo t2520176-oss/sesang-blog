@@ -66,8 +66,22 @@ def pick_topic(manual, threshold, seen):
     big = [t for t in hot if t["traffic_n"] >= threshold] or [t for t in hot if t["traffic_n"] >= 200]
     if not big:
         return None
-    t = max(big, key=lambda x: x["traffic_n"])
+    # among the 6 biggest, prefer the issue people search to *do* something about
+    # (방법·신청·일정·조회…), not just gossip; ties go to the bigger search volume
+    best = None
+    for t in sorted(big, key=lambda x: -x["traffic_n"])[:6]:
+        sub = related(t["keyword"])
+        score = sum(any(w in s for w in HELP) for s in sub) + (2 if any(w in t["keyword"] for w in HELP) else 0)
+        log(f"  후보 {t['keyword']} ({t['traffic']}) 도움 점수 {score}: {sub}")
+        if best is None or score > best[0]:
+            best = (score, t)
+    t = best[1]
     return t["keyword"], "search", t["news"], t["traffic"]
+
+
+HELP = ("방법", "신청", "조회", "일정", "대상", "기간", "지원", "환급", "요금", "가격", "시간", "운행",
+        "파업", "중계", "날씨", "금리", "세금", "혜택", "뜻", "이유", "정리", "영향", "대처", "확인",
+        "예약", "접수", "결과", "발표", "개정", "변경", "할인", "보상", "증상", "예방", "후기", "비교")
 
 
 def main():
@@ -100,7 +114,7 @@ def main():
     extra = ""
     if sub:
         extra = ("네이버 자동완성 검색어: " + ", ".join(sub) + "\n"
-                 "이 중 뉴스 내용과 맞는 세부 키워드 1개를 골라 제목 맨 앞에 그대로 쓰고(띄어쓰기 그대로), "
+                 "이 중 뉴스 내용과 맞고, 검색하는 사람에게 실제 도움이 되는(방법·일정·대상·영향 등) 세부 키워드 1개를 골라 제목 맨 앞에 그대로 쓰고(띄어쓰기 그대로), "
                  "본문에 자연스럽게 3~4번 넣는다. 관련 있는 다른 검색어 1~2개는 소제목에 녹인다. "
                  "뉴스와 상관없는 검색어는 쓰지 않는다.\n")
     post = writer.generate_post(key, keyword, mode, length, extra=extra, news=news, photos=photos, style=style)
