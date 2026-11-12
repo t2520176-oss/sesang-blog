@@ -122,14 +122,15 @@ IMAGE_GUIDE = (
 
 def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 1500,
                   brand_info: str = "", extra: str = "", news: list = None,
-                  photos: int = 0, style: str = "", own_photos: list = None) -> dict:
+                  photos: int = 0, style: str = "", own_photos: list = None, _retry=False) -> dict:
     """own_photos: jpeg bytes the AI looks at (review mode); image blocks then carry "photo": n."""
     """{'title': str, 'blocks': [{'type','text'}], 'tags': [str]} 를 돌려준다."""
     m = MODES[mode]
     prompt = (
         f"주제: {topic or '사진 속 제품 (사진을 보고 무엇인지 파악)'}\n"
         f"글 종류: {m['label']} - {m['guide']}\n"
-        f"분량: 본문 약 {length}자\n"
+        f"분량: 본문(공백 포함) {length}자 이상. 짧게 끝내지 않는다. 소제목 4~6개, 소제목마다 문단 2~4개, "
+        f"문단마다 2~4문장으로 구체적인 장면·느낌·이유를 풀어 쓴다.\n"
     )
     if mode == "brand" and brand_info.strip():
         prompt += f"\n브랜드 정보:\n{brand_info.strip()}\n"
@@ -166,6 +167,16 @@ def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 15
     post["blocks"] = [b for b in post.get("blocks", []) if keep(b)][:80]
     if not post.get("title") or not post["blocks"]:
         raise RuntimeError("AI 응답이 비어 있습니다. 다시 시도해 주세요.")
+    got = sum(len(b.get("text", "")) for b in post["blocks"])
+    if got < length * 0.7 and not _retry:            # too short -> ask once more, longer
+        try:
+            longer = generate_post(api_key, topic, mode, length, brand_info,
+                                   extra + f"\n이전 답이 {got}자로 너무 짧았다. 반드시 {length}자 이상으로 길게 쓴다.\n",
+                                   news, photos, style, own_photos, _retry=True)
+            if sum(len(b.get("text", "")) for b in longer["blocks"]) > got:
+                return longer
+        except RuntimeError:
+            pass
     return post
 
 

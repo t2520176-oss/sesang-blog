@@ -98,7 +98,7 @@ def make_review(paths, hint="", notes=""):
     style_f = HERE / "style_review.txt"
     style = style_f.read_text(encoding="utf-8") if style_f.exists() else ""
     print(f"후기 쓰는 중: 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
-    post = writer.generate_post(key, "", "review", 1500, extra=extra, style=style,
+    post = writer.generate_post(key, "", "review", 2200, extra=extra, style=style,
                                 own_photos=[p.read_bytes() for p in paths])
     name = post["title"].split(",")[0].split("…")[0][:20]
     return post["title"], cloud_build.publish(post, name, own=paths, kind="review")
