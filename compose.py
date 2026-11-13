@@ -52,7 +52,8 @@ def build(post, keyword, folder="", pixabay_key="", log=print, own=None):
             dst = out / f"사진{n}.jpg"
             dst.write_bytes(Path(ph).read_bytes())
             blocks.append({"type": "image", "text": "", "caption": "", "path": str(dst), "credit": "", "no": n})
-    post = {**post, "blocks": blocks}
+    links = [b for b in blocks if b["type"] == "link"]     # shop links always go last
+    post = {**post, "blocks": [b for b in blocks if b["type"] != "link"] + links}
     (out / "post.json").write_text(json.dumps(post, ensure_ascii=False, indent=1), encoding="utf-8")
     (out / "본문.txt").write_text(_plain(post), encoding="utf-8")
     page = out / "미리보기.html"
@@ -70,6 +71,8 @@ def _plain(post):
             lines.append(f"■ {b['text']}")
         elif b["type"] == "quote":
             lines.append(f"“{b['text']}”")
+        elif b["type"] == "link":
+            lines.append(f"{b['text']}\n{b['url']}")
         else:
             lines.append(b["text"])
         lines.append("")
@@ -108,6 +111,11 @@ def _html(post):
             parts.append(f'<p><br></p><p><b><span style="font-size:19px">{t}</span></b></p>')
         elif b["type"] == "quote":
             parts.append(f'<blockquote><p>{t}</p></blockquote>')
+        elif b["type"] == "link":       # shop link on its own line -> Naver turns it into a link card
+            u = e(b["url"])
+            parts.append(f'<p><b>{t}</b></p><p><a href="{u}">{u}</a></p><p><br></p>')
+        elif b["type"] == "notice":
+            parts.append(f'<p><span style="font-size:13px;color:#888">{t}</span></p><p><br></p>')
         else:
             parts.append(f"<p>{t}</p><p><br></p>")   # 문단 사이 빈 줄 (블로그 글처럼)
     parts.append("</div>")

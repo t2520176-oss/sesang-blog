@@ -31,6 +31,7 @@
   <button class="big pick" id="pick">＋ 물건 사진 고르기</button>
   <div class="thumbs" id="thumbs"></div>
   <input type="text" id="memo" placeholder="메모 (선택) 예: 쿠팡 2만원, 2주 써봄">
+  <input type="url" id="shop" placeholder="🛒 쇼핑 커넥트 링크 (선택) https://naver.me/..." autocapitalize="off" autocomplete="off" style="margin-top:8px;width:100%;box-sizing:border-box;padding:14px;font-size:16px;border:1px solid #ccc;border-radius:10px">
   <button class="big" id="send" disabled>보내기</button>
   <div id="msg"></div>
   <details class="card" style="margin-top:20px"><summary><b>⚡ 바로 쓰기 설정</b> <small id="keyState"></small></summary>
@@ -63,7 +64,9 @@ $("#send").onclick=async()=>{
   const fast=!!localStorage.getItem("gh_key");
   const url="https://ntfy.sh/"+topic()+(fast?"":"-i");
   try{
-    const memo=$("#memo").value.trim();
+    const shop=$("#shop").value.trim();
+    if(shop&&!/^https?:\/\/\S+$/.test(shop))throw new Error("쇼핑 링크는 https:// 로 시작해야 해요");
+    const memo=($("#memo").value.trim()+(shop?" 쇼핑링크: "+shop:"")).trim();
     if(memo&&fast){const r=await fetch(url,{method:"POST",body:memo});if(!r.ok)throw new Error("메모 전송 실패 "+r.status)}
     const links=[];
     for(let i=0;i<files.length;i++){
@@ -76,14 +79,14 @@ $("#send").onclick=async()=>{
       if(!links.length)throw new Error("사진 주소를 받지 못했어요");
       const body=links.map((l,i)=>`![사진${i+1}](${l})`).join("\n")+(memo?"\n\n"+memo:"");
       $("#msg").textContent="✅ 사진 올림!\n이어서 열리는 GitHub 화면에서\n초록색 [Create] 만 누르세요.";
-      files=[];$("#thumbs").innerHTML="";$("#memo").value="";b.textContent="보내기";
+      files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";b.textContent="보내기";
       setTimeout(()=>{location.href="https://github.com/t2520176-oss/sesang-blog/issues/new?title="+
         encodeURIComponent("후기")+"&body="+encodeURIComponent(body)},900);
       return}
     const go=await kick();
     $("#msg").textContent=go?"✅ 보냈어요! 바로 글을 쓰기 시작했어요.\n2~3분 뒤 \"후기 글 완성\" 알림이 옵니다.":
       "✅ 보냈어요!\n자동 확인 때 글을 씁니다 (늦으면 몇 시간).\n바로 쓰게 하려면 아래 [바로 쓰기 설정]을 해 주세요.";
-    files=[];$("#thumbs").innerHTML="";$("#memo").value="";b.textContent="보내기"
+    files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";b.textContent="보내기"
   }catch(e){$("#msg").textContent="❌ "+e.message+"\n인터넷을 확인하고 다시 눌러 주세요.";b.disabled=false}};
 // start the cloud job right away (GitHub's own timer is unreliable). Token: Actions write, this repo only.
 async function kick(){const k=localStorage.getItem("gh_key");if(!k)return false;

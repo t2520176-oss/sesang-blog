@@ -86,10 +86,39 @@ def download(urls, token=""):
     return paths[:8]
 
 
+SHOP_NOTICE = ("이 포스팅은 네이버 쇼핑 커넥트 활동의 일환으로, 판매 발생 시 수수료를 제공받습니다. "
+               "제품은 제 돈으로 직접 구매해 사용했습니다.")
+
+
+def shop_links(notes):
+    """Pull shopping links out of the memo -> (links, notes without them)."""
+    links = [u.rstrip(".,)") for u in re.findall(r"https?://[^\s<>\"']+", notes)
+             if not re.match(r"https?://(github\.com|[\w.-]*githubusercontent\.com|ntfy\.sh)/", u)]
+    for u in links:
+        notes = notes.replace(u, " ")
+    notes = re.sub(r"(구매|쇼핑|상품)?\s*링크\s*[:：]?\s*(?=\s|$)", " ", notes)
+    return list(dict.fromkeys(links))[:3], re.sub(r"\s+", " ", notes).strip()
+
+
+def add_shop_links(post, links):
+    """Disclosure line at the top (공정위 rule) + link card(s) at the end."""
+    if not links:
+        return post
+    blocks = [{"type": "notice", "text": SHOP_NOTICE}] + post["blocks"]
+    for i, u in enumerate(links):
+        blocks.append({"type": "link", "text": "🛒 제가 산 제품 보러 가기" + (f" {i + 1}" if len(links) > 1 else ""),
+                       "url": u})
+    blocks.append({"type": "notice", "text": SHOP_NOTICE})
+    return {**post, "blocks": blocks}
+
+
 def make_review(paths, hint="", notes=""):
     """Write the review from photo Paths, publish it. Returns (title, url)."""
     if not paths:
         raise SystemExit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
+    links, notes = shop_links(notes)
+    if links:
+        print(f"쇼핑 링크 {len(links)}개", flush=True)
     key = os.environ.get("GEMINI_API_KEY", "").strip()
     extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}\n" if notes else ""
     if hint:   # may be a product name or just a note ("써보고말해요")
@@ -100,6 +129,7 @@ def make_review(paths, hint="", notes=""):
     print(f"후기 쓰는 중: 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
     post = writer.generate_post(key, "", "review", 2200, extra=extra, style=style,
                                 own_photos=[p.read_bytes() for p in paths])
+    post = add_shop_links(post, links)
     name = post["title"].split(",")[0].split("…")[0][:20]
     return post["title"], cloud_build.publish(post, name, own=paths, kind="review")
 
