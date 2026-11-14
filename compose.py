@@ -113,7 +113,9 @@ def _html(post):
             parts.append(f'<blockquote><p>{t}</p></blockquote>')
         elif b["type"] == "link":       # shop link on its own line -> Naver turns it into a link card
             u = e(b["url"])
-            parts.append(f'<p><b>{t}</b></p><p><a href="{u}">{u}</a></p><p><br></p>')
+            parts.append(f'<p><b>{t}</b></p><p><a href="{u}">{u}</a></p>'
+                         f'<button class="nocopy linkbtn" onclick="copyText(\'{u}\',\'쇼핑 링크\')">🔗 링크만 복사 '
+                         f'(네이버 앱 [링크] 버튼에 붙여넣기)</button><p><br></p>')
         elif b["type"] == "notice":
             parts.append(f'<p><span style="font-size:13px;color:#888">{t}</span></p><p><br></p>')
         else:
