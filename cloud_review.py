@@ -20,7 +20,8 @@ import images
 import writer
 
 HERE = Path(__file__).parent
-NO_NAME = {"", "후기", "리뷰", "내돈내산", "review", "사진", "new issue"}
+NO_NAME = {"", "후기", "리뷰", "내돈내산", "review", "사진", "new issue", "3d출력물", "3d 출력물", "출력물"}
+PRINT_MARK = "[3D출력물]"       # the upload page puts this in the memo for "my own 3D print" posts
 
 
 def photo_urls(body):
@@ -112,26 +113,49 @@ def add_shop_links(post, links):
     return {**post, "blocks": blocks}
 
 
+def add_model_links(post, links):
+    """My own design: 'get the file' card(s) at the end, no affiliate notice (it's my own work)."""
+    if not links:
+        return post
+    blocks = list(post["blocks"])
+    for i, u in enumerate(links):
+        blocks.append({"type": "link", "text": "🖨️ 3D 모델 파일 받으러 가기" + (f" {i + 1}" if len(links) > 1 else ""),
+                       "url": u})
+    return {**post, "blocks": blocks}
+
+
 def make_review(paths, hint="", notes=""):
-    """Write the review from photo Paths, publish it. Returns (title, url)."""
+    """Write the review (or my-3D-print post) from photo Paths, publish it. Returns (title, url)."""
     if not paths:
         raise SystemExit("사진을 읽지 못했습니다 (너무 작거나 이미지가 아님).")
+    mode = "print3d" if PRINT_MARK in notes else "review"
+    notes = notes.replace(PRINT_MARK, " ").strip()
     links, notes = shop_links(notes)
+    model_links, links = (links, []) if mode == "print3d" else ([], links)   # my own model: no affiliate notice
+    if mode == "print3d":
+        print(f"3D 출력물 글 / 모델 링크 {len(model_links)}개", flush=True)
     if links:
         print(f"쇼핑 링크 {len(links)}개", flush=True)
     key = os.environ.get("GEMINI_API_KEY", "").strip()
-    extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}\n" if notes else ""
-    if hint:   # may be a product name or just a note ("써보고말해요")
+    if mode == "print3d":
+        extra = f"사용자 메모(출력 정보·만든 이유 등): {notes}\n" if notes else ""
+        if model_links:
+            extra += "글 끝에 모델 파일 링크 카드가 자동으로 붙는다. 본문 마지막 문단에서 '아래 링크에서 파일을 받을 수 있다'고 자연스럽게 안내한다.\n"
+    else:
+        extra = f"사용자 메모(가격·구매처·써본 느낌): {notes}\n" if notes else ""
+    if hint and mode == "print3d":
+        extra += f"이 작품의 이름: '{hint}' - 제목 맨 앞에 그대로 쓴다.\n"
+    elif hint:   # may be a product name or just a note ("써보고말해요")
         extra += (f"사용자가 붙인 제목: '{hint}' - 제품 이름이면 그대로 쓰고, 제품 이름이 아니면 "
                   "메모로만 참고한다. 제품은 사진을 보고 파악한다.\n")
-    style_f = HERE / "style_review.txt"
+    style_f = HERE / ("style_print3d.txt" if mode == "print3d" else "style_review.txt")
     style = style_f.read_text(encoding="utf-8") if style_f.exists() else ""
     print(f"후기 쓰는 중: 사진 {len(paths)}장 / 메모 {len(notes)}자", flush=True)
-    post = writer.generate_post(key, "", "review", 2200, extra=extra, style=style,
+    post = writer.generate_post(key, "", mode, 2200, extra=extra, style=style,
                                 own_photos=[p.read_bytes() for p in paths])
-    post = add_shop_links(post, links)
-    name = post["title"].split(",")[0].split("…")[0][:20]
-    return post["title"], cloud_build.publish(post, name, own=paths, kind="review")
+    post = add_shop_links(add_model_links(post, model_links), links)
+    name = (hint if mode == "print3d" and hint else post["title"].split(",")[0].split("…")[0])[:20]
+    return post["title"], cloud_build.publish(post, name, own=paths, kind=mode)
 
 
 def main():

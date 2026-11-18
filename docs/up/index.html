@@ -18,8 +18,13 @@
  .card{background:#fff;border-radius:12px;padding:14px;margin:10px 0}
  small{color:#888}
  a{color:#03a14a}
+ .tabs{display:flex;gap:8px;margin:4px 0 6px}
+ .tabs button{flex:1;padding:14px 6px;font-size:16px;font-weight:700;border:2px solid #03c75a;border-radius:12px;background:#fff;color:#03a14a}
+ .tabs button.on{background:#03c75a;color:#fff}
+ body.p3d header{background:#6d4aff}body.p3d .big:not(.pick){background:#6d4aff}body.p3d .big:disabled{background:#c3b5ff}
+ body.p3d .pick{color:#6d4aff;border-color:#6d4aff}body.p3d .tabs button{border-color:#6d4aff;color:#6d4aff}body.p3d .tabs button.on{background:#6d4aff;color:#fff}
 </style></head><body>
-<header><h1>📷 내돈내산 후기 올리기</h1><p>사진 고르고 [보내기] → GitHub 화면에서 [Create] → 2~3분 뒤 폰 알림</p></header>
+<header><h1 id="h1">📷 내돈내산 후기 올리기</h1><p>사진 고르고 [보내기] → GitHub 화면에서 [Create] → 2~3분 뒤 폰 알림</p></header>
 <main>
  <div class="card hidden" id="setup" style="display:none">
   <b>처음 한 번만</b><br><small>받은 "사진 받는 주소"를 넣어 주세요 (sesang-up-로 시작). 이 폰에 저장됩니다.</small>
@@ -27,9 +32,11 @@
   <button class="big" id="saveTopic">저장</button>
  </div>
  <div id="app" style="display:none">
+  <div class="tabs"><button id="tReview">🛍 내돈내산 후기</button><button id="tPrint">🖨️ 내 3D 출력물</button></div>
   <input type="file" id="files" accept="image/*" multiple hidden>
   <button class="big pick" id="pick">＋ 물건 사진 고르기</button>
   <div class="thumbs" id="thumbs"></div>
+  <input type="text" id="name" placeholder="작품 이름 (선택) 예: 할로윈 호박 비누받침" style="display:none;margin-bottom:8px">
   <input type="text" id="memo" placeholder="메모 (선택) 예: 쿠팡 2만원, 2주 써봄">
   <input type="url" id="shop" placeholder="🛒 쇼핑 커넥트 링크 (선택) https://naver.me/..." autocapitalize="off" autocomplete="off" style="margin-top:8px;width:100%;box-sizing:border-box;padding:14px;font-size:16px;border:1px solid #ccc;border-radius:10px">
   <button class="big" id="send" disabled>보내기</button>
@@ -43,6 +50,14 @@
 </main>
 <script>
 const $=s=>document.querySelector(s);let files=[];
+let mode=localStorage.getItem("up_mode")==="print3d"?"print3d":"review";
+function setMode(m){mode=m;localStorage.setItem("up_mode",m);const p=m==="print3d";
+  document.body.classList.toggle("p3d",p);$("#tReview").classList.toggle("on",!p);$("#tPrint").classList.toggle("on",p);
+  $("#h1").textContent=p?"🖨️ 내 3D 출력물 글 만들기":"📷 내돈내산 후기 올리기";
+  $("#pick").textContent=p?"＋ 출력물 사진 고르기":"＋ 물건 사진 고르기";
+  $("#name").style.display=p?"block":"none";
+  $("#memo").placeholder=p?"메모 (선택) 예: 실크 PLA, 서포트 없음, 3시간, 선물용":"메모 (선택) 예: 쿠팡 2만원, 2주 써봄";
+  $("#shop").placeholder=p?"🖨️ 모델 링크 (선택) MakerWorld·hellopixelform…":"🛒 쇼핑 커넥트 링크 (선택) https://naver.me/..."}
 const topic=()=>localStorage.getItem("up_topic")||"";
 function show(){const ok=/^sesang-up-[a-z0-9]+$/.test(topic());$("#setup").style.display=ok?"none":"block";$("#app").style.display=ok?"block":"none"}
 $("#saveTopic").onclick=()=>{const t=$("#topic").value.trim().toLowerCase();
@@ -64,9 +79,10 @@ $("#send").onclick=async()=>{
   const fast=!!localStorage.getItem("gh_key");
   const url="https://ntfy.sh/"+topic()+(fast?"":"-i");
   try{
-    const shop=$("#shop").value.trim();
-    if(shop&&!/^https?:\/\/\S+$/.test(shop))throw new Error("쇼핑 링크는 https:// 로 시작해야 해요");
-    const memo=($("#memo").value.trim()+(shop?" 쇼핑링크: "+shop:"")).trim();
+    const p3d=mode==="print3d",shop=$("#shop").value.trim(),name=p3d?$("#name").value.trim():"";
+    if(shop&&!/^https?:\/\/\S+$/.test(shop))throw new Error("링크는 https:// 로 시작해야 해요");
+    const memo=((p3d?"[3D출력물] ":"")+(fast&&name?"작품 이름: "+name+" ":"")+$("#memo").value.trim()+
+      (shop?(p3d?" ":" 쇼핑링크: ")+shop:"")).trim();
     if(memo&&fast){const r=await fetch(url,{method:"POST",body:memo});if(!r.ok)throw new Error("메모 전송 실패 "+r.status)}
     const links=[];
     for(let i=0;i<files.length;i++){
@@ -79,14 +95,14 @@ $("#send").onclick=async()=>{
       if(!links.length)throw new Error("사진 주소를 받지 못했어요");
       const body=links.map((l,i)=>`![사진${i+1}](${l})`).join("\n")+(memo?"\n\n"+memo:"");
       $("#msg").textContent="✅ 사진 올림!\n이어서 열리는 GitHub 화면에서\n초록색 [Create] 만 누르세요.";
-      files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";b.textContent="보내기";
+      files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";$("#name").value="";b.textContent="보내기";
       setTimeout(()=>{location.href="https://github.com/t2520176-oss/sesang-blog/issues/new?title="+
-        encodeURIComponent("후기")+"&body="+encodeURIComponent(body)},900);
+        encodeURIComponent(p3d?(name||"3D출력물"):"후기")+"&body="+encodeURIComponent(body)},900);
       return}
     const go=await kick();
-    $("#msg").textContent=go?"✅ 보냈어요! 바로 글을 쓰기 시작했어요.\n2~3분 뒤 \"후기 글 완성\" 알림이 옵니다.":
+    $("#msg").textContent=go?"✅ 보냈어요! 바로 글을 쓰기 시작했어요.\n2~3분 뒤 \""+(p3d?"출력물":"후기")+" 글 완성\" 알림이 옵니다.":
       "✅ 보냈어요!\n자동 확인 때 글을 씁니다 (늦으면 몇 시간).\n바로 쓰게 하려면 아래 [바로 쓰기 설정]을 해 주세요.";
-    files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";b.textContent="보내기"
+    files=[];$("#thumbs").innerHTML="";$("#memo").value="";$("#shop").value="";$("#name").value="";b.textContent="보내기"
   }catch(e){$("#msg").textContent="❌ "+e.message+"\n인터넷을 확인하고 다시 눌러 주세요.";b.disabled=false}};
 // start the cloud job right away (GitHub's own timer is unreliable). Token: Actions write, this repo only.
 async function kick(){const k=localStorage.getItem("gh_key");if(!k)return false;
@@ -101,6 +117,7 @@ $("#saveKey").onclick=()=>{const k=$("#key").value.trim();if(!/^github_pat_\w+$/
   localStorage.setItem("gh_key",k);$("#key").value="";keyInfo();alert("저장됨! 이제 보내면 바로 글을 씁니다.")};
 function keyInfo(){$("#keyState").textContent=localStorage.getItem("gh_key")?"✅ 설정됨 (보내면 바로 씀)":"아직 안 함"}
 keyInfo();
+$("#tReview").onclick=()=>setMode("review");$("#tPrint").onclick=()=>setMode("print3d");setMode(mode);
 show();
 </script>
 </body></html>

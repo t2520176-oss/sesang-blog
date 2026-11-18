@@ -44,6 +44,7 @@ jobs:
           NTFY_UPLOAD_TOPIC: ${{ secrets.NTFY_UPLOAD_TOPIC }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NOW: ${{ github.event.inputs.now }}
+          GEMINI_MAX_WAIT: "300"
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
         run: python cloud_inbox.py
       - name: 사이트에 올리기

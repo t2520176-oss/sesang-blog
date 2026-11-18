@@ -165,7 +165,8 @@ def write_index(items):
         + (f'<img src="posts/{e(i["slug"])}/thumb.jpg" alt="">' if i.get("thumb") else '<div class="noimg">📝</div>')
         + f'<div><b>{e(i["title"])}</b><small>{e(i["date"])} · {e(i["keyword"])}'
         + (f' · 검색 {e(i["traffic"])}' if i.get("traffic") else "")
-        + (' · 🛍 내돈내산' if i.get("kind") == "review" else '' if i.get("auto") else ' · 직접 요청')
+        + (' · 🛍 내돈내산' if i.get("kind") == "review" else ' · 🖨️ 내 출력물' if i.get("kind") == "print3d"
+           else '' if i.get("auto") else ' · 직접 요청')
         + '</small></div></a>'
         for i in items) or '<p class="empty">아직 만든 글이 없습니다. 첫 자동 실행을 기다리거나 [글 새로 만들기]를 누르세요.</p>'
     (DOCS / "index.html").write_text(INDEX_PAGE.replace("{{ROWS}}", rows), encoding="utf-8")

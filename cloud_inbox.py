@@ -87,7 +87,7 @@ def process(batch, st):
         title, url = cloud_review.make_review(cloud_review.download(urls), "", notes)
     except BaseException as e:  # noqa: BLE001
         print("실패:", e)
-        busy = "바쁩니다" in str(e) or "Timeout" in str(e)
+        busy = isinstance(e, cloud_review.writer.AIBusy) or "바쁩니다" in str(e) or "Timeout" in str(e)
         st["tries"] = st.get("tries", 0) + 1
         if busy and st["tries"] < 8:          # free AI busy: try again on the next run
             STATE.write_text(json.dumps(st), encoding="utf-8")
