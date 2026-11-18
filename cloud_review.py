@@ -166,10 +166,12 @@ def main():
         sys.exit("사진이 없습니다. 이슈 본문에 물건 사진을 1장 이상 붙여 주세요.")
     paths = download(urls, os.environ.get("GH_TOKEN", ""))
     # GitHub needs a title, so short ones ("1", "후기") mean "work it out from the photos"
-    hint = "" if title.lower() in NO_NAME or len(title) <= 2 or title.isdigit() else title
+    plain = re.sub(r"\s+", "", title.lower())
+    generic = re.fullmatch(r"(내가?|제가?)?(직접)?(만든|뽑은)?(3d)?(프린트|프린팅)?(출력물|작품|후기)?", plain)
+    hint = "" if title.lower() in NO_NAME or generic or len(title) <= 2 or title.isdigit() else title
     t, url = make_review(paths, hint, notes_from(body))
     (HERE / "_issue_reply.txt").write_text(
-        f"✅ 후기 글 완성: **{t}**\n\n{url}\n\n열어서 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.",
+        f"✅ {'출력물' if PRINT_MARK in body else '후기'} 글 완성: **{t}**\n\n{url}\n\n열어서 [제목 복사] → [본문 복사] 후 네이버 앱에 붙여넣으세요.",
         encoding="utf-8")
 
 
