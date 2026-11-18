@@ -1,60 +1,114 @@
 name: 내돈내산 후기 만들기
 
-# 폰 GitHub 앱에서 이 저장소에 새 이슈(사진 첨부)를 만들면 실행됩니다. 저장소 주인이 만든 이슈만 처리.
+# 업로드 페이지/폰 GitHub 앱에서 이 저장소에 새 이슈(사진 첨부)를 만들면 실행됩니다. 저장소 주인이 만든 이슈만 처리.
+# AI(Gemini 무료)가 바쁘면 실패로 끝내지 않고 이슈에 '다시시도' 표시를 붙여 둡니다.
+# 타이머(timer.yml)가 매시간 그 이슈들을 다시 처리합니다 (최대 5번).
 on:
   issues:
-    types: [opened, reopened]   # 실패했으면 이슈를 닫았다가 다시 열면 재시도
+    types: [opened, reopened]   # 이슈를 닫았다가 다시 열어도 재시도
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "다시 처리할 이슈 번호"
+        required: true
 
 permissions:
   contents: write
   issues: write
 
+# 후기는 자기 줄을 따로 씁니다. 예전엔 자동 글(blog/inbox)과 같은 줄이라
+# 대기 중이던 후기가 뒤에 온 자동 글 때문에 '취소'될 수 있었어요.
 concurrency:
-  group: blog
+  group: review-${{ github.event.issue.number || github.event.inputs.issue }}
   cancel-in-progress: false
 
 jobs:
   review:
-    if: github.event.issue.user.login == github.repository_owner
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.user.login == github.repository_owner
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUM: ${{ github.event.issue.number || github.event.inputs.issue }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -q requests pillow anthropic imageio-ffmpeg
+      - name: 이슈 내용 가져오기
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/issues/$NUM" > _issue.json
+          python - <<'PY'
+          import json, os
+          i = json.load(open("_issue.json", encoding="utf-8"))
+          owner = os.environ["GITHUB_REPOSITORY"].split("/")[0]
+          if i["user"]["login"] != owner or i.get("pull_request"):
+              raise SystemExit("저장소 주인이 만든 이슈만 처리합니다")
+          skip = i["state"] != "open"     # 다시 시도하러 왔는데 이미 처리됨
+          if skip:
+              print("이미 닫힌 이슈 - 건너뜀")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+              f.write(f"SKIP={'1' if skip else ''}\n")
+              for k, v in (("ISSUE_TITLE", i["title"] or ""), ("ISSUE_BODY", i["body"] or "")):
+                  f.write(f"{k}<<__END_{k}__\n{v}\n__END_{k}__\n")
+          PY
       - name: 사진 보고 후기 쓰기
+        id: write
+        if: env.SKIP != '1'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GH_TOKEN: ${{ github.token }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
+          GEMINI_MAX_WAIT: "780"     # AI가 바쁘면 최대 13분까지 간격을 늘려 가며 다시 시도
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-        run: python cloud_review.py || (echo "AI busy - retry in 90s"; sleep 90; python cloud_review.py) || (echo "retry in 180s"; sleep 180; python cloud_review.py)
+        run: |
+          set +e
+          python cloud_review.py; code=$?
+          if [ $code -eq 75 ]; then echo "busy=1" >> "$GITHUB_OUTPUT"; exit 0; fi
+          exit $code
       - name: 사이트에 올리기
+        if: env.SKIP != '1' && steps.write.outputs.busy != '1'
         run: |
           git config user.name "blog-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs
           git commit -m "후기 글 $(date +%F)"
-          git pull --rebase -q
-          git push
+          for i in 1 2 3 4 5; do git pull --rebase -q && git push && exit 0; sleep $((i*5)); done
+          exit 1
+      - name: 이슈에 결과 남기고 닫기
+        if: env.SKIP != '1' && steps.write.outputs.busy != '1'
+        run: |
+          gh issue comment "$NUM" --body-file _issue_reply.txt
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$NUM/labels/%EB%8B%A4%EC%8B%9C%EC%8B%9C%EB%8F%84" >/dev/null 2>&1 || true
+          gh issue close "$NUM"
       - name: 폰 알림 보내기
+        if: env.SKIP != '1' && steps.write.outputs.busy != '1'
+        timeout-minutes: 6
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python notify.py
-      - name: 이슈에 결과 남기고 닫기
+      - name: AI가 바쁠 때 - 나중에 자동으로 다시
+        if: steps.write.outputs.busy == '1'
         env:
-          GH_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} --body-file _issue_reply.txt
-          gh issue close ${{ github.event.issue.number }}
+          R="repos/$GITHUB_REPOSITORY"
+          tries=$(gh api "$R/issues/$NUM/comments" --jq '[.[]|select(.body|startswith("⏳"))]|length')
+          if [ "$tries" -ge 5 ]; then
+            gh api -X DELETE "$R/issues/$NUM/labels/%EB%8B%A4%EC%8B%9C%EC%8B%9C%EB%8F%84" >/dev/null 2>&1 || true
+            gh issue comment "$NUM" --body "❌ AI가 계속 바빠서 후기를 만들지 못했어요 ($(cat _busy.txt)). 이 이슈를 닫았다가 다시 열면 또 시도합니다."
+            [ -n "$NTFY_TOPIC" ] && curl -s -H "Title: Review failed" -d "AI가 계속 바빠서 후기를 못 만들었어요. 내일 이슈를 다시 열어 주세요." "https://ntfy.sh/$NTFY_TOPIC" || true
+            exit 0
+          fi
+          gh api "$R/labels" -f name=다시시도 -f color=fbca04 >/dev/null 2>&1 || true
+          gh api "$R/issues/$NUM/labels" -f "labels[]=다시시도" >/dev/null
+          gh issue comment "$NUM" --body "⏳ AI(Gemini 무료)가 지금 너무 바빠요. 사진은 그대로 두고 1시간 안에 자동으로 다시 씁니다. ($((tries+1))/5)"
+          if [ "$tries" -eq 0 ] && [ -n "$NTFY_TOPIC" ]; then
+            curl -s -H "Title: Review delayed" -d "AI가 바빠서 후기가 늦어져요. 1시간 안에 자동으로 다시 씁니다. 다시 올리지 않아도 돼요." "https://ntfy.sh/$NTFY_TOPIC" || true
+          fi
       - name: 실패 알림
         if: failure()
         env:
-          GH_TOKEN: ${{ github.token }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} --body "❌ 후기를 만들지 못했어요. 사진이 붙어 있는지 확인하고 새 이슈로 다시 올려 주세요. (Actions 기록에 자세한 이유가 있어요)"
+          gh issue comment "$NUM" --body "❌ 후기를 만들지 못했어요. 사진이 붙어 있는지 확인하고 새 이슈로 다시 올려 주세요. (Actions 기록에 자세한 이유가 있어요)"
           [ -n "$NTFY_TOPIC" ] && curl -s -H "Title: Blog review failed" -d "후기 글 만들기 실패 - GitHub 이슈의 댓글을 확인하세요" "https://ntfy.sh/$NTFY_TOPIC" || true

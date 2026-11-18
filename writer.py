@@ -1,5 +1,6 @@
 """AI(무료 Gemini 또는 Claude)로 블로그 글(제목 + 본문 블록 + 태그)을 만든다."""
 import base64
+import os
 import json
 import time
 
@@ -166,7 +167,8 @@ def generate_post(api_key: str, topic: str, mode: str = "home", length: int = 15
 
     api_key = (api_key or "").strip()
     if not api_key.startswith("sk-ant"):
-        post = _gemini(api_key, prompt, system_prompt(style), own_photos)   # 무료 (Google AI Studio 키)
+        post = _gemini(api_key, prompt, system_prompt(style), own_photos,
+                       max_wait=60 if _retry else None)   # 길이 보충은 오래 기다리지 않음. 무료 (Google AI Studio 키)
     else:
         post = _claude(api_key, prompt, system_prompt(style))   # 유료 (Anthropic 키)
     post["tags"] = [t.lstrip("#").strip() for t in post.get("tags", []) if t.strip()][:10]
@@ -208,7 +210,7 @@ GEMINI_SCHEMA = {
 }
 
 
-def _gemini(api_key, prompt, system=SYSTEM, images=None):
+def _gemini(api_key, prompt, system=SYSTEM, images=None, max_wait=None):
     if not api_key:
         raise RuntimeError("AI 키가 없습니다. aistudio.google.com/apikey 에서 무료 키를 받아 넣으세요.")
     body = {
@@ -220,34 +222,59 @@ def _gemini(api_key, prompt, system=SYSTEM, images=None):
         "generationConfig": {"responseMimeType": "application/json",
                              "responseSchema": GEMINI_SCHEMA, "maxOutputTokens": 16000},
     }
-    last = ""
-    for k, model in enumerate(GEMINI_MODELS * 2):   # busy (503) is usually brief: one more round
-        if k == len(GEMINI_MODELS):
-            time.sleep(20)
-        try:
-            r = requests.post(GEMINI_URL.format(model), json=body, timeout=(15, 120),
-                              headers={"x-goog-api-key": api_key})
-        except (requests.Timeout, requests.ConnectionError) as e:   # 응답 지연 -> 다음 모델
-            last += f" | {model}: 응답 없음 ({type(e).__name__})"
-            continue
-        if r.status_code in (429, 404, 500, 503):        # 무료 한도 초과/모델 없음/혼잡 -> 다음 모델
-            last += f" | {model}: {r.status_code} {r.text[:120]}"
-            continue
-        if r.status_code in (400, 401, 403):
-            raise RuntimeError(f"Gemini 키 오류 ({r.status_code}). 키를 확인하세요: {r.text[:200]}")
-        r.raise_for_status()
-        data = r.json()
-        cands = data.get("candidates") or []
-        if not cands:
-            raise RuntimeError(f"AI가 이 주제로 글을 쓰지 않았습니다. 주제를 바꿔 주세요. "
-                               f"({data.get('promptFeedback', {})})")
-        c = cands[0]
-        if c.get("finishReason") == "MAX_TOKENS":
-            raise RuntimeError("글이 너무 길어 중간에 끊겼습니다. 분량을 줄여 주세요.")
-        text = "".join(p.get("text", "") for p in c.get("content", {}).get("parts", [])
-                       if not p.get("thought"))
-        return json.loads(text)
-    raise RuntimeError("오늘 무료 사용량을 다 썼거나 서버가 바쁩니다. 잠시 후(또는 내일) 다시 시도하세요. " + last)
+    # Free tier is often "busy" (503) for a few minutes: keep trying with growing pauses
+    # up to GEMINI_MAX_WAIT seconds (cloud jobs set this high). A model whose daily quota
+    # is used up (429 ...PerDay) or that doesn't exist (404) is skipped from then on.
+    if max_wait is None:
+        max_wait = float(os.environ.get("GEMINI_MAX_WAIT", "60"))
+    start, pause, dead, last = time.time(), 15, set(), ""
+    while True:
+        for model in GEMINI_MODELS:
+            if model in dead:
+                continue
+            try:
+                r = requests.post(GEMINI_URL.format(model), json=body, timeout=(15, 150),
+                                  headers={"x-goog-api-key": api_key})
+            except (requests.Timeout, requests.ConnectionError) as e:   # 응답 지연 -> 다음 모델
+                last = f"{model}: 응답 없음 ({type(e).__name__})"
+                continue
+            if r.status_code in (404,) or (r.status_code == 429 and "PerDay" in r.text):
+                dead.add(model)                                  # 모델 없음 / 오늘 한도 끝
+                last = f"{model}: {r.status_code}"
+                continue
+            if r.status_code in (429, 500, 502, 503, 504):      # 잠깐 혼잡 -> 다음 모델, 나중에 다시
+                last = f"{model}: {r.status_code}"
+                continue
+            if r.status_code in (400, 401, 403):
+                raise RuntimeError(f"Gemini 키 오류 ({r.status_code}). 키를 확인하세요: {r.text[:200]}")
+            r.raise_for_status()
+            data = r.json()
+            cands = data.get("candidates") or []
+            if not cands:
+                raise RuntimeError(f"AI가 이 주제로 글을 쓰지 않았습니다. 주제를 바꿔 주세요. "
+                                   f"({data.get('promptFeedback', {})})")
+            c = cands[0]
+            if c.get("finishReason") == "MAX_TOKENS":
+                raise RuntimeError("글이 너무 길어 중간에 끊겼습니다. 분량을 줄여 주세요.")
+            text = "".join(p.get("text", "") for p in c.get("content", {}).get("parts", [])
+                           if not p.get("thought"))
+            if k := round(time.time() - start):
+                print(f"AI 응답 받음 ({model}, {k}초 걸림)", flush=True)
+            return json.loads(text)
+        waited = time.time() - start
+        if len(dead) == len(GEMINI_MODELS) or waited + pause > max_wait:
+            break
+        print(f"AI 서버 혼잡 ({last}) - {pause}초 뒤 다시 시도 (지금까지 {round(waited)}초)", flush=True)
+        time.sleep(pause)
+        pause = min(pause * 2, 120)
+    raise AIBusy(("오늘 무료 사용량을 다 썼습니다. 내일 다시 시도하세요. " if len(dead) == len(GEMINI_MODELS)
+                  else "AI 서버가 바쁩니다. 잠시 후 다시 시도하세요. ") + last)
+
+
+class AIBusy(RuntimeError):
+    """Gemini busy or out of free quota - worth retrying later, not a problem with the input."""
+
+
 
 
 # ---- Anthropic Claude (유료) ---------------------------------------------

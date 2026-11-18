@@ -150,4 +150,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except writer.AIBusy as e:          # not the user's fault: the workflow retries this issue later
+        print("AI 혼잡:", e, flush=True)
+        (HERE / "_busy.txt").write_text(str(e), encoding="utf-8")
+        sys.exit(75)

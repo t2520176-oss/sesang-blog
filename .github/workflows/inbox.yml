@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  actions: write
+  issues: read
 
 concurrency:
   group: blog
@@ -23,6 +25,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: AI가 바빠서 미뤄 둔 후기 다시 시도
+        if: github.event.inputs.now != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&labels=%EB%8B%A4%EC%8B%9C%EC%8B%9C%EB%8F%84" --jq '.[].number' || true); do
+            echo "후기 다시 시도: #$n"; gh workflow run review.yml -R "$GITHUB_REPOSITORY" -f issue="$n" || true
+          done
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
